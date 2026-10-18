@@ -1,0 +1,43 @@
+{
+  "name": "syncspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SyncSpace — real-time team workspace (chat + task boards).",
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently --names api,web --prefix-colors blue,magenta --kill-others-on-fail \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:web": "npm run dev --workspace @syncspace/web",
+    "dev:api": "npm run dev --workspace @syncspace/api",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @syncspace/api",
+    "db:migrate": "npm run db:migrate --workspace @syncspace/api",
+    "db:studio": "npm run db:studio --workspace @syncspace/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.2.5",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.2"
+  }
+}

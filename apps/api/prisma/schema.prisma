@@ -1,0 +1,16 @@
+// SyncSpace database schema.
+//
+// PROVISIONAL: no domain models are defined yet. The schema (users, workspaces,
+// members, channels, messages, boards, tasks, notifications, ...) is designed in
+// the dedicated database-design phase. This file only wires up the generator
+// and datasource so the Prisma client and PostgreSQL integration are in place.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}

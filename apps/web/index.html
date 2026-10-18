@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="SyncSpace — real-time team chat and task boards." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>SyncSpace</title>
+    <script>
+      // Apply the persisted theme before first paint to avoid a light/dark flash.
+      // Must stay in sync with src/stores/theme-store.ts and src/lib/theme.ts.
+      ;(function () {
+        try {
+          var stored = JSON.parse(localStorage.getItem('syncspace-theme') || 'null')
+          var theme = (stored && stored.state && stored.state.theme) || 'system'
+          var dark =
+            theme === 'dark' ||
+            (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (_) {}
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
