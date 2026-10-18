@@ -4,6 +4,8 @@
  * environment-agnostic (no DOM, no Node APIs) and must never import from apps.
  */
 export * from './constants'
+export * from './domain'
+export * from './permissions'
 export * from './schemas'
 export * from './socket'
 export type * from './types'

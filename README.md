@@ -3,11 +3,14 @@
 SyncSpace is a real-time team workspace: Slack-style channels and direct messages combined with
 Trello-style task boards, in one app.
 
-> **Status: foundation.** This repository currently contains the architecture, tooling and
-> infrastructure (monorepo, typed contracts, API skeleton, realtime layer, app shell, design
-> tokens, tests). Product features are built on top of it in the phases listed below.
+> **Status: foundation + data model.** The architecture, tooling and infrastructure are in place
+> (monorepo, typed contracts, API skeleton, realtime layer, app shell, design tokens), along with
+> the full MVP database schema and the authorization policy. Product features are built on top of
+> it in the phases listed below.
 
 - Architecture decisions: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Data model, invariants and delete rules: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
+- Authorization rules: [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md)
 - Feature folder conventions: [`apps/web/src/features/README.md`](apps/web/src/features/README.md)
 
 ## Tech stack
@@ -17,7 +20,7 @@ Trello-style task boards, in one app.
 | Web       | React 19, Vite 8, TypeScript, React Router 7, TanStack Query 5, Zustand 5, React Hook Form, Zod 4 |
 | UI        | Tailwind CSS 4, shadcn/ui-compatible tokens, lucide-react, @dnd-kit, @tanstack/react-virtual      |
 | API       | Node.js, Express 5, Socket.IO 4, Zod 4, Prisma 7 (PostgreSQL), pino, helmet, cors, JWT (cookies)  |
-| Shared    | `@syncspace/shared` — Zod schemas, DTO types, constants, typed socket events, room helpers        |
+| Shared    | `@syncspace/shared` — Zod schemas, enums, typed socket events, permission policy, domain helpers  |
 | Quality   | TypeScript 6 (strict), ESLint 10 (type-aware), Prettier, Vitest 4, Testing Library, supertest     |
 | Platforms | Vercel (web), Render (API), PostgreSQL                                                            |
 
@@ -27,7 +30,7 @@ Trello-style task boards, in one app.
 .
 ├── apps/
 │   ├── api/                    Express + Socket.IO server
-│   │   ├── prisma/             schema.prisma (provisional — no models yet)
+│   │   ├── prisma/             schema.prisma, migrations/, seed.ts
 │   │   ├── prisma.config.ts
 │   │   └── src/
 │   │       ├── app.ts          Express app factory (used by server and tests)
@@ -36,7 +39,7 @@ Trello-style task boards, in one app.
 │   │       ├── middleware/     logging, validation, auth, origin check, errors
 │   │       ├── modules/        feature modules (health so far)
 │   │       ├── sockets/        socket server, handshake auth, rooms, realtime publisher
-│   │       ├── lib/            logger, prisma, errors, tokens
+│   │       ├── lib/            logger, prisma, errors, tokens, permissions/
 │   │       ├── utils/          small pure helpers
 │   │       └── types/          Express type augmentation
 │   └── web/                    React SPA
@@ -47,8 +50,8 @@ Trello-style task boards, in one app.
 │           ├── hooks/  lib/  stores/  styles/  types/  test/
 ├── packages/
 │   └── shared/                 contracts shared by web and api
-│       └── src/  constants/  schemas/  socket/  types/  index.ts
-├── docs/ARCHITECTURE.md
+│       └── src/  constants/  domain/  permissions/  schemas/  socket/  types/  index.ts
+├── docs/                       ARCHITECTURE.md, DATA_MODEL.md, PERMISSIONS.md
 ├── eslint.config.js  .prettierrc.json  tsconfig.base.json
 └── package.json                npm workspaces + root scripts
 ```
@@ -59,7 +62,7 @@ Trello-style task boards, in one app.
 
 - **Node.js 22 LTS** recommended (`^20.19` or `>=22.12` supported)
 - **npm 10+** recommended
-- **PostgreSQL 15+** — optional until the database phase (the API boots without it)
+- **PostgreSQL 15+** — needed for data features; the API itself boots without it (`/health` works)
 
 ### Install
 
@@ -95,6 +98,14 @@ Configuration is validated at startup (`apps/api/src/config/env.ts`). In product
 | ------------------- | ----------------------- |
 | `VITE_API_BASE_URL` | `http://localhost:4000` |
 
+### Database
+
+```bash
+# with DATABASE_URL set in apps/api/.env
+npm run db:migrate   # apply migrations (creates the database schema)
+npm run db:seed      # demo data: alex@example.com (owner), sam@example.com (member), workspace "acme"
+```
+
 ### Run
 
 ```bash
@@ -122,7 +133,17 @@ Run from the repository root.
 | `npm test`             | Vitest in every workspace                                  |
 | `npm run db:generate`  | Regenerate the Prisma client                               |
 | `npm run db:migrate`   | `prisma migrate dev`                                       |
+| `npm run db:seed`      | Development seed data (refuses to run in production)       |
 | `npm run db:studio`    | Prisma Studio                                              |
+
+**Database invariant tests** (constraints, triggers, cascades) run against a real, migrated
+PostgreSQL and are skipped unless `TEST_DATABASE_URL` is set:
+
+```bash
+TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/syncspace_test npm run test --workspace @syncspace/api
+```
+
+Use a dedicated database (apply migrations to it first with `DATABASE_URL=<same url> npm run db:deploy --workspace @syncspace/api`).
 
 Workspace-specific: `npm run <script> --workspace @syncspace/<web|api|shared>`
 (e.g. `npm run test:watch --workspace @syncspace/web`).
@@ -164,8 +185,8 @@ The full reasoning is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Phase | Scope                                                                                          |
 | ----- | ---------------------------------------------------------------------------------------------- |
-| 0     | **Foundation** (this) — monorepo, contracts, API/realtime skeleton, app shell, tokens          |
-| 1     | Database design — Prisma schema for all MVP entities, migrations, seed data                    |
+| 0     | ✅ **Foundation** — monorepo, contracts, API/realtime skeleton, app shell, tokens              |
+| 1     | ✅ **Database schema + permissions** — MVP schema, migration, invariants, policy, seed         |
 | 2     | Authentication — register/login/logout, refresh rotation, session query, route guards          |
 | 3     | Workspaces, members and roles — CRUD, invitations, room-access policy                          |
 | 4     | Channels and direct messages — lists, membership, navigation                                   |

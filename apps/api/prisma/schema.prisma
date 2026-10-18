@@ -1,9 +1,14 @@
-// SyncSpace database schema.
+// SyncSpace database schema (MVP).
 //
-// PROVISIONAL: no domain models are defined yet. The schema (users, workspaces,
-// members, channels, messages, boards, tasks, notifications, ...) is designed in
-// the dedicated database-design phase. This file only wires up the generator
-// and datasource so the Prisma client and PostgreSQL integration are in place.
+// Conventions (see docs/DATA_MODEL.md for the full rationale):
+// - IDs: UUIDv7 (`uuid(7)`), stored as native `uuid`. Time-ordered, so B-tree inserts stay local.
+// - Timestamps: `timestamptz(3)`. `createdAt` defaults to now(); `updatedAt` is maintained by Prisma.
+// - Tables and columns are snake_case in PostgreSQL (`@@map` / `@map`), camelCase in TypeScript.
+// - Every workspace-owned row carries `workspace_id`. Composite foreign keys such as
+//   (board_id, workspace_id) -> boards(id, workspace_id) make cross-workspace references
+//   impossible at the database level, not just in application code.
+// - Invariants Prisma cannot express (CHECK constraints, partial unique indexes) live in the
+//   SQL migrations. Each one is listed in docs/DATA_MODEL.md.
 
 generator client {
   provider     = "prisma-client"
@@ -13,4 +18,566 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums — values must match the constants in @syncspace/shared (enforced by a test).
+// ---------------------------------------------------------------------------
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  MESSAGE
+  MENTION
+  TASK_ASSIGNED
+  TASK_UPDATED
+  INVITE
+  SYSTEM
+}
+
+enum NotificationEntityType {
+  WORKSPACE
+  CHANNEL
+  CONVERSATION
+  MESSAGE
+  BOARD
+  TASK
+  INVITE
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  /// Normalised (trimmed, lower-cased) by the application; a CHECK constraint rejects anything else.
+  email        String    @unique
+  name         String
+  avatarUrl    String?   @map("avatar_url")
+  /// Null until password auth is set up (or for future OAuth-only accounts).
+  passwordHash String?   @map("password_hash")
+  /// Coarse "last active" timestamp. Live presence is realtime-only and never persisted.
+  lastSeenAt   DateTime? @map("last_seen_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  ownedWorkspaces          Workspace[]               @relation("WorkspaceOwner")
+  memberships              WorkspaceMember[]
+  invitesCreated           WorkspaceInvite[]         @relation("InviteCreator")
+  channelsCreated          Channel[]                 @relation("ChannelCreator")
+  channelMemberships       ChannelMember[]
+  conversationsCreated     Conversation[]            @relation("ConversationCreator")
+  conversationParticipants ConversationParticipant[]
+  messages                 Message[]
+  reactions                MessageReaction[]
+  attachmentsUploaded      Attachment[]
+  boardsCreated            Board[]                   @relation("BoardCreator")
+  tasksCreated             Task[]                    @relation("TaskCreator")
+  taskAssignments          TaskAssignee[]
+  notifications            Notification[]            @relation("NotificationRecipient")
+  notificationsTriggered   Notification[]            @relation("NotificationActor")
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Workspaces & membership
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  name      String
+  /// URL identifier. Generated once at creation and never changed implicitly by renames.
+  slug      String   @unique
+  /// The single OWNER. Mirrors the OWNER WorkspaceMember row (kept in sync by the ownership service).
+  /// Restrict: a user who owns a workspace cannot be deleted until ownership is transferred.
+  ownerId   String   @map("owner_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner         User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members       WorkspaceMember[]
+  invites       WorkspaceInvite[]
+  channels      Channel[]
+  conversations Conversation[]
+  messages      Message[]
+  attachments   Attachment[]
+  boards        Board[]
+  tasks         Task[]
+  labels        TaskLabel[]
+  notifications Notification[]
+
+  @@index([ownerId])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Cascade: deleting a user removes their memberships (authored content is protected separately).
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Membership-scoped rows reference (workspace_id, user_id), so removing a member also removes
+  // their channel memberships, conversation participation, task assignments and channel read state.
+  channelMemberships       ChannelMember[]
+  conversationParticipants ConversationParticipant[]
+  taskAssignments          TaskAssignee[]
+  channelReadStates        ChannelReadState[]
+
+  // Also serves "members of workspace X" lookups (leading column).
+  @@unique([workspaceId, userId])
+  // "Workspaces of user Y".
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvite {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  /// Normalised like User.email.
+  email       String
+  /// OWNER is never invitable (CHECK constraint); ownership only moves by transfer.
+  role        WorkspaceRole @default(MEMBER)
+  /// SHA-256 of the invitation token. The raw token is only ever sent to the invitee.
+  tokenHash   String        @unique @map("token_hash")
+  expiresAt   DateTime      @map("expires_at") @db.Timestamptz(3)
+  acceptedAt  DateTime?     @map("accepted_at") @db.Timestamptz(3)
+  revokedAt   DateTime?     @map("revoked_at") @db.Timestamptz(3)
+  createdById String?       @map("created_by_id") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("InviteCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  // At most one *pending* invite per (workspace, email): partial unique index in SQL, which also
+  // serves pending-invite lookups. This index serves the workspace's full invite history.
+  @@index([workspaceId, createdAt])
+  // "Pending invites for this email" at sign-up / login.
+  @@index([email])
+  @@map("workspace_invites")
+}
+
+// ---------------------------------------------------------------------------
+// Channels
+// ---------------------------------------------------------------------------
+
+model Channel {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  workspaceId String      @map("workspace_id") @db.Uuid
+  name        String
+  slug        String
+  description String?
+  type        ChannelType @default(PUBLIC)
+  createdById String?     @map("created_by_id") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  /// Archived channels are read-only; preferred over deletion.
+  archivedAt  DateTime?   @map("archived_at") @db.Timestamptz(3)
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy  User?              @relation("ChannelCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  members    ChannelMember[]
+  messages   Message[]
+  readStates ChannelReadState[]
+
+  // Also serves "channels of workspace X" (leading column).
+  @@unique([workspaceId, slug])
+  // Target for composite foreign keys that pin children to the channel's workspace.
+  @@unique([id, workspaceId])
+  @@map("channels")
+}
+
+/// Explicit channel membership. Required for PRIVATE channels; PUBLIC channels are open to every
+/// workspace member (rows may exist for public channels later, e.g. for read state).
+model ChannelMember {
+  channelId   String   @map("channel_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  joinedAt    DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  channel         Channel         @relation(fields: [channelId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  /// The user must be a member of the channel's workspace; leaving the workspace removes the row.
+  workspaceMember WorkspaceMember @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([channelId, userId])
+  @@index([workspaceId, userId])
+  @@map("channel_members")
+}
+
+// ---------------------------------------------------------------------------
+// Direct & group conversations (deliberately separate from channels)
+// ---------------------------------------------------------------------------
+
+model Conversation {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  type        ConversationType
+  /// Optional display name for GROUP conversations. Always null for DIRECT.
+  name        String?
+  /// DIRECT only: the two participant ids, sorted and joined with ':'. Unique per workspace, so a
+  /// second DM between the same pair is impossible. Null for GROUP (CHECK constraint).
+  directKey   String?          @map("direct_key")
+  createdById String?          @map("created_by_id") @db.Uuid
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace    Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User?                     @relation("ConversationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@unique([workspaceId, directKey])
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String   @map("conversation_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  workspaceId    String   @map("workspace_id") @db.Uuid
+  joinedAt       DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  conversation    Conversation           @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspaceMember WorkspaceMember        @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readState       ConversationReadState?
+
+  @@id([conversationId, userId])
+  // "Conversations of user Y in workspace X" (the sidebar DM list).
+  @@index([workspaceId, userId])
+  @@map("conversation_participants")
+}
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+/// A message lives in exactly one destination: a channel XOR a conversation (CHECK constraint).
+/// Deletion is soft: the row stays (threads and reactions keep their anchor) and the service layer
+/// redacts `content`.
+model Message {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  workspaceId     String    @map("workspace_id") @db.Uuid
+  authorId        String    @map("author_id") @db.Uuid
+  channelId       String?   @map("channel_id") @db.Uuid
+  conversationId  String?   @map("conversation_id") @db.Uuid
+  /// Thread root. Replies are one level deep and share the root's destination (service invariant).
+  parentMessageId String?   @map("parent_message_id") @db.Uuid
+  content         String
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// Changes on any write (edit, soft delete). `editedAt` only changes when the author edits content.
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  editedAt        DateTime? @map("edited_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Restrict: authored history is never destroyed by deleting a user (accounts are anonymised instead).
+  author        User          @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  /// Composite FKs guarantee the destination belongs to the message's workspace.
+  channel       Channel?      @relation(fields: [channelId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  conversation  Conversation? @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  parentMessage Message?      @relation("MessageThread", fields: [parentMessageId], references: [id], onDelete: Cascade)
+  replies       Message[]     @relation("MessageThread")
+
+  reactions   MessageReaction[]
+  attachments Attachment[]
+
+  // Read cursors pointing at this message (cleared, not deleted, if the message row goes away).
+  channelReadCursors      ChannelReadState[]
+  conversationReadCursors ConversationReadState[]
+
+  // Keyset pagination of a channel / conversation timeline: (created_at, id) is a stable order.
+  @@index([channelId, createdAt, id])
+  @@index([conversationId, createdAt, id])
+  // Thread replies in order.
+  @@index([parentMessageId, createdAt])
+  // "Messages by user" and fast RESTRICT checks on user deletion.
+  @@index([authorId])
+  @@map("messages")
+}
+
+model MessageReaction {
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  /// Unicode emoji or a short code (e.g. ":party:"); validated by the application.
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One of each emoji per user per message; different emojis are allowed.
+  @@id([messageId, userId, emoji])
+  @@index([userId])
+  @@map("message_reactions")
+}
+
+// ---------------------------------------------------------------------------
+// Read state — one cursor per user per destination (never per-message receipts)
+//
+// Semantics: every message in the destination with created_at <= last_read_at is read.
+// `last_read_message_id` is the message the cursor was placed on (for "jump to unread" and
+// rendering the "new messages" divider); it must belong to the same destination (trigger) and is
+// cleared if that message row is hard-deleted, while `last_read_at` keeps the position.
+// No row = nothing read yet.
+// ---------------------------------------------------------------------------
+
+model ChannelReadState {
+  channelId         String   @map("channel_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  workspaceId       String   @map("workspace_id") @db.Uuid
+  lastReadAt        DateTime @map("last_read_at") @db.Timestamptz(3)
+  lastReadMessageId String?  @map("last_read_message_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// Pinned to the channel's workspace (composite FK); deleting the channel removes the cursor.
+  channel         Channel         @relation(fields: [channelId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  /// The user must be a member of that workspace; leaving or being removed deletes the cursor.
+  workspaceMember WorkspaceMember @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  /// Same-channel rule is enforced by the `channel_read_states_last_read_message` trigger.
+  lastReadMessage Message?        @relation(fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+
+  @@id([channelId, userId])
+  // All of a user's channel cursors in a workspace (sidebar unread badges) + membership cascade.
+  @@index([workspaceId, userId])
+  // SET NULL lookups when messages are hard-deleted (e.g. a channel cascade).
+  @@index([lastReadMessageId])
+  @@map("channel_read_states")
+}
+
+model ConversationReadState {
+  conversationId    String   @map("conversation_id") @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  lastReadAt        DateTime @map("last_read_at") @db.Timestamptz(3)
+  lastReadMessageId String?  @map("last_read_message_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// The user must be a participant; leaving the conversation (or the workspace, or deleting the
+  /// conversation) cascades through the participant row and removes the cursor.
+  participant     ConversationParticipant @relation(fields: [conversationId, userId], references: [conversationId, userId], onDelete: Cascade)
+  /// Same-conversation rule is enforced by the `conversation_read_states_last_read_message` trigger.
+  lastReadMessage Message?                @relation(fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+
+  // The primary key doubles as the participant FK index; per-user listing goes through
+  // conversation_participants (workspace_id, user_id) and joins on this key.
+  @@id([conversationId, userId])
+  @@index([lastReadMessageId])
+  @@map("conversation_read_states")
+}
+
+/// File metadata only. Bytes live in object storage (S3 / R2 / Cloudinary); `storageKey` is the
+/// object key, `url` the delivery URL. Belongs to a message XOR a task (CHECK constraint), and is
+/// created together with its owner (upload to storage first, then insert in the same transaction).
+model Attachment {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  messageId    String?  @map("message_id") @db.Uuid
+  taskId       String?  @map("task_id") @db.Uuid
+  uploadedById String?  @map("uploaded_by_id") @db.Uuid
+  fileName     String   @map("file_name")
+  mimeType     String   @map("mime_type")
+  /// Bytes. CHECK size >= 0.
+  size         Int
+  url          String
+  storageKey   String?  @map("storage_key")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  message    Message?  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  task       Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@index([taskId])
+  @@index([workspaceId])
+  @@map("attachments")
+}
+
+// ---------------------------------------------------------------------------
+// Boards & tasks
+// ---------------------------------------------------------------------------
+
+model Board {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String
+  description String?
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt  DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("BoardCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  columns   BoardColumn[]
+  tasks     Task[]
+
+  @@unique([id, workspaceId])
+  @@index([workspaceId])
+  @@map("boards")
+}
+
+/// Ordered by `position` (fractional ordering: a moved item gets the midpoint of its new
+/// neighbours, so a move updates one row). See positionBetween() in @syncspace/shared.
+model BoardColumn {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  boardId   String   @map("board_id") @db.Uuid
+  name      String
+  position  Float
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  // Target for tasks' composite FK (a task's column must belong to the task's board).
+  @@unique([id, boardId])
+  @@index([boardId, position])
+  @@map("board_columns")
+}
+
+model Task {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  boardId     String       @map("board_id") @db.Uuid
+  columnId    String       @map("column_id") @db.Uuid
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  /// Order within the column (same fractional strategy as BoardColumn.position).
+  position    Float
+  dueDate     DateTime?    @map("due_date") @db.Timestamptz(3)
+  createdById String?      @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
+  archivedAt  DateTime?    @map("archived_at") @db.Timestamptz(3)
+
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// The board must belong to the task's workspace.
+  board       Board                 @relation(fields: [boardId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  /// The column must belong to the task's board. NoAction (checked at end of statement): a column
+  /// that still holds tasks cannot be deleted on its own, while deleting the whole board (which
+  /// cascades to both columns and tasks in one statement) still works.
+  column      BoardColumn           @relation(fields: [columnId, boardId], references: [id, boardId], onDelete: NoAction)
+  createdBy   User?                 @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignees   TaskAssignee[]
+  labels      TaskLabelAssignment[]
+  attachments Attachment[]
+
+  @@unique([id, workspaceId])
+  // Rendering a board: tasks per column in order.
+  @@index([boardId, columnId, position])
+  @@index([columnId])
+  // Workspace-wide task queries (e.g. due soon).
+  @@index([workspaceId, dueDate])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId      String   @map("task_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  assignedAt  DateTime @default(now()) @map("assigned_at") @db.Timestamptz(3)
+
+  task            Task            @relation(fields: [taskId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  /// The assignee must be a member of the task's workspace; leaving the workspace unassigns them.
+  workspaceMember WorkspaceMember @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  // "Tasks assigned to user Y in workspace X".
+  @@index([workspaceId, userId])
+  @@map("task_assignees")
+}
+
+model TaskLabel {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  name        String
+  /// Hex colour `#RRGGBB` (CHECK constraint).
+  color       String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assignments TaskLabelAssignment[]
+
+  @@unique([workspaceId, name])
+  @@unique([id, workspaceId])
+  @@map("task_labels")
+}
+
+model TaskLabelAssignment {
+  taskId      String @map("task_id") @db.Uuid
+  labelId     String @map("label_id") @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+
+  /// Both FKs share workspace_id, so a label can only be applied to a task in the same workspace.
+  task  Task      @relation(fields: [taskId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  label TaskLabel @relation(fields: [labelId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId, workspaceId])
+  @@map("task_label_assignments")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+/// Denormalised on purpose: title/body are rendered at creation time, and `entityType` + `entityId`
+/// is a loose pointer for navigation (no FK — the target may be deleted later).
+model Notification {
+  id          String                  @id @default(uuid(7)) @db.Uuid
+  userId      String                  @map("user_id") @db.Uuid
+  workspaceId String?                 @map("workspace_id") @db.Uuid
+  actorId     String?                 @map("actor_id") @db.Uuid
+  type        NotificationType
+  title       String
+  body        String?
+  entityType  NotificationEntityType? @map("entity_type")
+  entityId    String?                 @map("entity_id") @db.Uuid
+  readAt      DateTime?               @map("read_at") @db.Timestamptz(3)
+  createdAt   DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user      User       @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?      @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  // Inbox listing and unread counts (`read_at IS NULL`).
+  @@index([userId, readAt, createdAt])
+  @@index([workspaceId])
+  @@map("notifications")
 }

@@ -4,8 +4,11 @@ import {
   apiErrorResponseSchema,
   CLIENT_EVENTS,
   cursorPaginationQuerySchema,
+  destinationUnreadSchema,
   ERROR_CODES,
   ERROR_STATUS,
+  LIMITS,
+  markReadInputSchema,
   PAGINATION,
   rooms,
   SERVER_EVENTS,
@@ -34,9 +37,19 @@ describe('socket event names', () => {
 })
 
 describe('socket payload schemas', () => {
-  it('accepts a valid workspace room payload and rejects an empty id', () => {
-    expect(workspaceRoomPayloadSchema.safeParse({ workspaceId: 'w1' }).success).toBe(true)
+  it('accepts UUID ids (the database id format) and rejects anything else', () => {
+    const uuidV7 = '01920000-7c00-7000-8000-000000000001'
+    expect(workspaceRoomPayloadSchema.safeParse({ workspaceId: uuidV7 }).success).toBe(true)
     expect(workspaceRoomPayloadSchema.safeParse({ workspaceId: '' }).success).toBe(false)
+    expect(workspaceRoomPayloadSchema.safeParse({ workspaceId: 'w1' }).success).toBe(false)
+    expect(workspaceRoomPayloadSchema.safeParse({ workspaceId: "1' OR '1'='1" }).success).toBe(
+      false,
+    )
+  })
+
+  it('builds rooms from UUIDs unchanged', () => {
+    const id = '01920000-7c00-7000-8000-000000000001'
+    expect(rooms.channel(id)).toBe(`channel:${id}`)
   })
 })
 
@@ -67,5 +80,25 @@ describe('error contract', () => {
   it('rejects unknown error codes', () => {
     const body = { error: { code: 'TEAPOT', message: 'nope' } }
     expect(apiErrorResponseSchema.safeParse(body).success).toBe(false)
+  })
+})
+
+describe('read-state contracts', () => {
+  const messageId = '01920000-7c00-7000-8000-000000000001'
+
+  it('accepts a mark-read request for a message id only', () => {
+    expect(markReadInputSchema.safeParse({ messageId }).success).toBe(true)
+    expect(markReadInputSchema.safeParse({ messageId: 'latest' }).success).toBe(false)
+  })
+
+  it('allows a destination that was never read (no cursor) and a cursor whose message was deleted', () => {
+    expect(destinationUnreadSchema.safeParse({ unreadCount: 3, cursor: null }).success).toBe(true)
+    const cursor = { lastReadAt: '2026-01-01T00:00:00.000Z', lastReadMessageId: null }
+    expect(destinationUnreadSchema.safeParse({ unreadCount: 0, cursor }).success).toBe(true)
+  })
+
+  it('caps unread counts', () => {
+    const unreadCount = LIMITS.UNREAD_COUNT_CAP + 1
+    expect(destinationUnreadSchema.safeParse({ unreadCount, cursor: null }).success).toBe(false)
   })
 })

@@ -71,6 +71,11 @@ export default defineConfig([
     files: ['apps/api/**/*.ts'],
     languageOptions: { globals: globals.node },
   },
+  {
+    // Prisma seed/maintenance scripts are CLIs: console output is their interface.
+    files: ['apps/api/prisma/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
 
   // Shared package must stay runtime-agnostic: no DOM, no Node globals.
   {

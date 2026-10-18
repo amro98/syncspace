@@ -8,7 +8,8 @@ import { AppError } from '@/lib/errors'
 const ALGORITHM = 'HS256'
 
 const accessTokenClaimsSchema = z.object({
-  sub: z.string().min(1),
+  /** User id (UUID). */
+  sub: z.uuid(),
 })
 
 export type AccessTokenClaims = z.infer<typeof accessTokenClaimsSchema>

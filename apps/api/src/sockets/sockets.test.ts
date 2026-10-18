@@ -19,6 +19,10 @@ import { createSocketServer, realtime } from './index'
 import type { RoomAccessPolicy } from './room-access'
 import type { TypedServer } from './types'
 
+const USER_ID = '01920000-7c00-7000-8000-0000000000a1'
+const WORKSPACE_ID = '01920000-7c00-7000-8000-0000000000b1'
+const NOTIFICATION_ID = '01920000-7c00-7000-8000-0000000000c1'
+
 type TestClient = ClientSocket<ServerToClientEvents, ClientToServerEvents>
 
 const allowAll: RoomAccessPolicy = {
@@ -75,17 +79,17 @@ describe('socket server', () => {
   })
 
   it('denies room joins by default', async () => {
-    const client = createClient(await startServer(), 'user-1')
+    const client = createClient(await startServer(), USER_ID)
     await waitForConnect(client)
 
     const ack: SocketAck = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, {
-      workspaceId: 'w1',
+      workspaceId: WORKSPACE_ID,
     })
     expect(ack).toEqual({ ok: false, error: { code: 'FORBIDDEN', message: expect.any(String) } })
   })
 
   it('validates join payloads', async () => {
-    const client = createClient(await startServer(allowAll), 'user-1')
+    const client = createClient(await startServer(allowAll), USER_ID)
     await waitForConnect(client)
 
     const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, { workspaceId: '' })
@@ -94,24 +98,28 @@ describe('socket server', () => {
   })
 
   it('delivers server events to joined rooms and to the personal user room', async () => {
-    const client = createClient(await startServer(allowAll), 'user-1')
+    const client = createClient(await startServer(allowAll), USER_ID)
     await waitForConnect(client)
 
-    const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, { workspaceId: 'w1' })
+    const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, {
+      workspaceId: WORKSPACE_ID,
+    })
     expect(ack).toEqual({ ok: true, data: null })
 
     const workspaceUpdate = new Promise((resolve) => {
       client.once(SERVER_EVENTS.WORKSPACE_UPDATED, resolve)
     })
-    realtime.emit(rooms.workspace('w1'), SERVER_EVENTS.WORKSPACE_UPDATED, { workspaceId: 'w1' })
-    await expect(workspaceUpdate).resolves.toEqual({ workspaceId: 'w1' })
+    realtime.emit(rooms.workspace(WORKSPACE_ID), SERVER_EVENTS.WORKSPACE_UPDATED, {
+      workspaceId: WORKSPACE_ID,
+    })
+    await expect(workspaceUpdate).resolves.toEqual({ workspaceId: WORKSPACE_ID })
 
     const notification = new Promise((resolve) => {
       client.once(SERVER_EVENTS.NOTIFICATION_CREATED, resolve)
     })
-    realtime.emit(rooms.user('user-1'), SERVER_EVENTS.NOTIFICATION_CREATED, {
-      notificationId: 'n1',
+    realtime.emit(rooms.user(USER_ID), SERVER_EVENTS.NOTIFICATION_CREATED, {
+      notificationId: NOTIFICATION_ID,
     })
-    await expect(notification).resolves.toEqual({ notificationId: 'n1' })
+    await expect(notification).resolves.toEqual({ notificationId: NOTIFICATION_ID })
   })
 })

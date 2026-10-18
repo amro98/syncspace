@@ -41,6 +41,8 @@ function createTestApp() {
 
 const app = createTestApp()
 
+const USER_ID = '01920000-7c00-7000-8000-0000000000a1'
+
 describe('validate middleware', () => {
   it('passes parsed and coerced input to the handler', async () => {
     const response = await request(app)
@@ -74,17 +76,17 @@ describe('requireAuth middleware', () => {
   })
 
   it('rejects tampered tokens', async () => {
-    const token = `${signAccessToken('user-1')}x`
+    const token = `${signAccessToken(USER_ID)}x`
     await request(app).get('/me').set('Cookie', `${ACCESS_TOKEN_COOKIE}=${token}`).expect(401)
   })
 
   it('exposes the authenticated user id', async () => {
-    const token = signAccessToken('user-1')
+    const token = signAccessToken(USER_ID)
     const response = await request(app)
       .get('/me')
       .set('Cookie', `${ACCESS_TOKEN_COOKIE}=${token}`)
       .expect(200)
 
-    expect(response.body).toEqual({ userId: 'user-1' })
+    expect(response.body).toEqual({ userId: USER_ID })
   })
 })

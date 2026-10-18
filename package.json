@@ -25,6 +25,7 @@
     "test": "npm run test --workspaces --if-present",
     "db:generate": "npm run db:generate --workspace @syncspace/api",
     "db:migrate": "npm run db:migrate --workspace @syncspace/api",
+    "db:seed": "npm run db:seed --workspace @syncspace/api",
     "db:studio": "npm run db:studio --workspace @syncspace/api"
   },
   "devDependencies": {

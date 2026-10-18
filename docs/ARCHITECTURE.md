@@ -40,8 +40,10 @@ no risk of the web and API drifting onto different contract versions.
 
 **Rules.**
 
-- Shared contains **contracts only**: Zod schemas, inferred types, constants, socket event maps,
-  room helpers. No business logic, no I/O.
+- Shared contains **contracts and pure domain rules only**: Zod schemas, inferred types,
+  constants/enums, socket event maps, room helpers, the authorization policy
+  (`permissions/`), and pure helpers both sides must compute identically (`domain/`: ordering
+  positions, slugs, DM keys). No I/O, no persistence, no framework code.
 - Runtime-agnostic: no DOM, no Node APIs, no React. Only dependency: `zod`. (ESLint enforces the
   forbidden imports.)
 - Never imports from `apps/*`. Dependency direction is always `apps → shared`.
@@ -272,9 +274,20 @@ apps/api/src/
   on `npm install` (postinstall) and with `npm run db:generate`.
 - The Prisma client is created lazily (`getPrisma()`), so the API boots in development without a
   database; production requires `DATABASE_URL` at startup.
-- **The schema is provisional (no models).** Entities, ID strategy, indexes and constraints are
-  designed in the database-design phase.
-- Migrations: `prisma migrate dev` locally; `prisma migrate deploy` in the deploy pipeline.
+- **The MVP schema is final** — models, relations, constraints, indexes, delete rules and
+  invariants are specified in [`DATA_MODEL.md`](DATA_MODEL.md). Highlights:
+  - IDs: UUIDv7 (`@default(uuid(7)) @db.Uuid`) everywhere; validated as UUIDs at the API boundary.
+  - Tenancy is enforced by the database: composite foreign keys pin every child row to its
+    workspace, and membership-scoped rows reference the `(workspace_id, user_id)` membership.
+  - Rules Prisma cannot express (CHECK constraints, partial unique indexes, deferred owner
+    trigger, thread trigger) are hand-written in the migration. Prisma ignores them when diffing,
+    so they cause no drift (verified with `prisma migrate diff`).
+- Use **unchecked (scalar-id) inputs** for writes to rows with composite relations
+  (`{ workspaceId, channelId, ... }` rather than nested `connect`), so the shared `workspace_id`
+  is set once and explicitly.
+- Migrations: `prisma migrate dev` locally; `prisma migrate deploy` in the deploy pipeline. Never
+  edit an applied migration — add a new one. `npm run db:seed` loads development data (refuses to
+  run in production).
 
 ## 14. Frontend structure and design system
 
@@ -304,9 +317,13 @@ apps/web/src/
   memory router and isolated QueryClient (`src/test/render.tsx`).
 - API: supertest against `createApp()` (no network port); Socket.IO tested end-to-end with
   `socket.io-client` on an ephemeral port.
-- Shared: schema and helper unit tests.
-- Later phases add: API integration tests against a real PostgreSQL (dedicated test database),
-  and Playwright end-to-end tests for critical flows (auth, messaging, drag-and-drop).
+- Shared: schema, domain-helper and **permission-policy** unit tests (table-driven across
+  OWNER/ADMIN/MEMBER/non-member).
+- Database invariants: `apps/api/src/db/invariants.db.test.ts` exercises every constraint and
+  trigger against a migrated PostgreSQL. It runs only when `TEST_DATABASE_URL` is set and is
+  skipped otherwise — `npm test` never pretends a database was reached. Each test creates and
+  cleans up its own uniquely named rows.
+- Later phases add Playwright end-to-end tests for critical flows (auth, messaging, drag-and-drop).
 - Tests never depend on the developer's `.env` (the API test config clears `DATABASE_URL`).
 
 ## 16. Deployment target
@@ -341,3 +358,24 @@ Notes for the deployment phase:
 - API dev server uses `node --watch --import tsx`, **not** `tsx watch`: `tsx watch` reads stdin,
   and under `concurrently` on Windows that pending read on the shared stdin pipe blocks the server
   process before it can listen.
+
+## 18. Authorization architecture
+
+**Decision.** Authorization rules are pure functions in `@syncspace/shared/permissions`, re-exported
+with enforcement helpers by `apps/api/src/lib/permissions`. Full rules: [`PERMISSIONS.md`](PERMISSIONS.md).
+
+**Why.** One definition serves the API (authoritative enforcement) and the web client (showing or
+hiding controls), so the UI can never offer an action the server rejects, or vice versa. Pure
+functions over plain context objects are trivially unit-testable.
+
+**Rules.**
+
+- Policy functions take normalised contexts (`WorkspaceActor`, `ChannelContext`, …) — never
+  Express requests, Prisma models or dates. Services load rows and map them with the `to*Context`
+  helpers in `lib/permissions/context.ts`.
+- Routes and services never compare roles directly (`role === 'ADMIN'`); they call a `can*` function.
+- Enforcement order: `ensureVisible(canAccess…)` (404, no existence leak) then
+  `authorize(canDo…)` (403).
+- Client-side checks are UX only; every mutation is re-authorised by the API.
+- The database enforces the structural invariants (tenancy, membership, ownership) independently,
+  as a backstop for bugs in application code.
