@@ -24,10 +24,17 @@ export type QueryFilters = Readonly<Record<string, FilterValue>>
 const NO_FILTERS: QueryFilters = {}
 
 export const queryKeys = {
-  health: () => ['health'] as const,
-
   auth: {
-    session: () => ['auth', 'session'] as const,
+    all: () => ['auth'] as const,
+    /** The signed-in user, or null when signed out. */
+    session: () => [...queryKeys.auth.all(), 'session'] as const,
+    providers: () => [...queryKeys.auth.all(), 'providers'] as const,
+    oauthPending: () => [...queryKeys.auth.all(), 'oauth-pending'] as const,
+    resetToken: (token: string) => [...queryKeys.auth.all(), 'reset-token', token] as const,
+  },
+
+  invites: {
+    preview: (token: string) => ['invites', 'preview', token] as const,
   },
 
   workspaces: {

@@ -1,24 +1,28 @@
 # Features
 
-One folder per product domain. Created in the phase that implements the
-feature — no placeholder folders. Planned: `auth`, `workspaces`, `members`,
-`channels`, `messages`, `conversations`, `presence`, `boards`, `tasks`,
-`notifications`, `search`.
+One folder per product domain, created in the phase that implements it. Present: `auth`,
+`workspaces`, `invites`, `realtime`. Planned: `members`, `channels`, `messages`,
+`conversations`, `presence`, `boards`, `tasks`, `notifications`, `search`.
 
 ```
 features/<feature>/
-  api/          queryFn/mutationFn wrappers around `apiClient` + query/mutation hooks
+  api.ts        calls to `apiClient`, typed with schemas from @syncspace/shared
+  hooks.ts      TanStack Query hooks (server state) and feature hooks
   components/   feature UI
-  hooks/        feature-specific hooks (non-server state)
-  realtime/     socket event -> TanStack Query cache handlers
-  routes/       lazy-loaded route modules (pages)
-  index.ts      public surface — other features import only from here
+  routes/       pages mounted by app/router/routes.tsx
+  *.test.tsx    behaviour tests through the real route tree (src/test/render.tsx)
 ```
+
+Small features keep `api.ts` / `hooks.ts` as single files; split them into folders when they
+grow. Route pages are imported eagerly today; switch a feature's routes to React Router `lazy`
+once bundle size warrants it.
 
 Rules:
 
 - Server data is fetched with TanStack Query using keys from `@/lib/query-keys`.
 - HTTP goes through `@/lib/api-client`; sockets through `@/lib/socket`.
 - Request/response shapes come from `@syncspace/shared` — do not redeclare them.
-- Features may depend on `components/`, `hooks/`, `lib/`, `stores/`, and other
-  features' `index.ts`; `components/`, `hooks/`, `lib/` never import features.
+- Permission checks for showing controls use the shared policy (`canInviteMember`, …); the API
+  enforces the same rules.
+- Features may depend on `components/`, `lib/`, `stores/` and other features;
+  `components/` and `lib/` never import features.

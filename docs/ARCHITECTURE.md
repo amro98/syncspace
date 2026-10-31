@@ -121,8 +121,9 @@ Every mutation of persistent data follows this exact order:
 
 - Sockets join `user:<userId>` automatically on connect. Notifications and per-user sync target it.
 - Joining any other room is **authorized against persistent membership** via the
-  `RoomAccessPolicy` seam (`apps/api/src/sockets/room-access.ts`). Until the membership modules
-  exist, the default policy denies every join (secure by default).
+  `RoomAccessPolicy` seam (`apps/api/src/sockets/room-access.ts`). The server uses
+  `membershipRoomAccess` (workspace membership; channel rules via `canAccessChannel`); without a
+  policy, every join is denied (secure by default).
 - Socket handshake authentication uses the same httpOnly access-token cookie as REST.
 
 **Event naming.**
@@ -227,22 +228,30 @@ Clients branch on `code`, never on `message`. A resource the user cannot see ret
   header and the error body and attached to every log line.
 - Express 5 forwards rejected promises from async handlers to the error handler — no wrappers needed.
 
-## 11. Authentication direction
+## 11. Authentication
 
-- **Session transport:** httpOnly, `Secure` (in production) cookies. Tokens are never readable by
-  JavaScript and never stored in localStorage.
-- **Access token:** short-lived JWT (15 min, HS256, `sub` = user id) in the `ss_access` cookie.
-  Verified by `requireAuth` (REST) and the Socket.IO handshake middleware.
-- **Refresh token:** opaque random token, stored **hashed** in PostgreSQL, rotated on every use,
-  in a separate cookie scoped to the refresh endpoint. Enables logout/revocation.
-- **Passwords:** hashed with bcrypt (`bcryptjs`), added in the auth phase.
-- **CSRF:** `SameSite=Lax` cookies + JSON-only bodies + `verifyOrigin` middleware rejecting
-  state-changing requests from origins not in `CORS_ORIGIN`.
-- **Deployment caveat:** Vercel and Render default domains are different _sites_, which makes the
-  API cookie third-party — blocked by Safari and increasingly by other browsers. Production must
-  serve web and API from the **same registrable domain** (e.g. `app.syncspace.dev` on Vercel and
-  `api.syncspace.dev` on Render) so cookies stay first-party with `SameSite=Lax`.
-- `JWT_SECRET` is mandatory (≥32 chars) in production; development uses a logged, insecure fallback.
+Full design, flows and setup: [`AUTH.md`](AUTH.md).
+
+- **Session transport:** one httpOnly session cookie (`ss_session`) carrying a JWT (HS256,
+  `sub` = user id, `ver` = `User.tokenVersion`). Never readable by JavaScript, never in
+  localStorage. Verified by `requireAuth` (REST) and the Socket.IO handshake.
+- **Lifetime ("Remember me"):** off = browser-session cookie with a 12-hour JWT; on = persistent
+  30-day cookie and JWT. The JWT expiry always equals the cookie lifetime.
+- **Revocation:** every authenticated request compares the token's `ver` with
+  `User.tokenVersion` (one primary-key lookup). A password reset increments it, revoking every
+  session. _Decision:_ no session table and no refresh tokens — the version check gives
+  server-side revocation without that machinery. Revisit only if per-device session management
+  becomes a feature.
+- **Passwords:** bcrypt (`bcryptjs`, cost 12). Policy (8–72 chars/bytes, upper, lower, number,
+  special) is defined once in `@syncspace/shared`.
+- **Social sign-in:** Google and GitHub via authorization code + `state` + PKCE. Verified emails
+  only; new accounts and links to existing accounts always require explicit confirmation.
+- **CSRF:** `SameSite=Lax` cookies + JSON-only bodies + `verifyOrigin` rejecting state-changing
+  requests from origins not in `CORS_ORIGIN`.
+- **Deployment:** Vercel and Render default domains are different _sites_, which makes the API
+  cookie third-party. Production serves web and API from the **same registrable domain**
+  (e.g. `app.syncspace.dev` / `api.syncspace.dev`) so `SameSite=Lax` cookies stay first-party.
+- `JWT_SECRET`, `FRONTEND_URL` and `API_PUBLIC_URL` are mandatory in production.
 
 ## 12. Backend structure
 
@@ -259,8 +268,11 @@ apps/api/src/
   types/            ambient type augmentation (Express Request)
 ```
 
-- Feature routes mount under `/api/<resource>`; probes are `/health` (liveness) and
-  `/health/ready` (database readiness).
+- Resources mount at the API root (`/auth`, `/workspaces`, `/invites`) — the API has its own
+  origin, so a `/api` prefix adds nothing. Probes are `/health` (liveness) and `/health/ready`
+  (database readiness). `/dev/mail` exists only in development.
+- Workspace-scoped routes live under `/workspaces/:workspaceId/*` behind `requireWorkspaceMember`,
+  which loads the membership once (404 for non-members) and exposes `req.workspaceAccess`.
 - Routers do HTTP; services hold business logic and talk to Prisma; services call
   `realtime.emit` after committing.
 - Configuration is read only through `config/env.ts`, never `process.env` elsewhere.
@@ -319,10 +331,12 @@ apps/web/src/
   `socket.io-client` on an ephemeral port.
 - Shared: schema, domain-helper and **permission-policy** unit tests (table-driven across
   OWNER/ADMIN/MEMBER/non-member).
-- Database invariants: `apps/api/src/db/invariants.db.test.ts` exercises every constraint and
-  trigger against a migrated PostgreSQL. It runs only when `TEST_DATABASE_URL` is set and is
-  skipped otherwise — `npm test` never pretends a database was reached. Each test creates and
-  cleans up its own uniquely named rows.
+- **The API suite runs against a real PostgreSQL engine.** `src/test/global-setup.ts` starts an
+  embedded PGlite (PostgreSQL compiled to WebAssembly), applies every migration, and serves it on a
+  local port; set `TEST_DATABASE_URL` to use a regular PostgreSQL server instead. Auth, workspace,
+  socket and invariant tests all use it. Tests create uniquely named rows, so a shared database
+  works; files run sequentially.
+- OAuth providers are faked at the `fetch` level; no real Google/GitHub credentials are needed.
 - Later phases add Playwright end-to-end tests for critical flows (auth, messaging, drag-and-drop).
 - Tests never depend on the developer's `.env` (the API test config clears `DATABASE_URL`).
 

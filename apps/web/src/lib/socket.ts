@@ -23,3 +23,11 @@ export function getSocket(): AppSocket {
   })
   return socket
 }
+
+/**
+ * Closes the connection (sign-out). The next session reconnects through
+ * `getSocket().connect()`, and the server re-authenticates the new cookie.
+ */
+export function disconnectSocket(): void {
+  socket?.disconnect()
+}

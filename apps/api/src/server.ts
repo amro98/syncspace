@@ -5,11 +5,12 @@ import { env } from '@/config/env'
 import { logger } from '@/lib/logger'
 import { disconnectPrisma } from '@/lib/prisma'
 import { createSocketServer, realtime } from '@/sockets'
+import { membershipRoomAccess } from '@/sockets/room-access'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
 const httpServer = createServer(createApp())
-const io = createSocketServer(httpServer)
+const io = createSocketServer(httpServer, { roomAccess: membershipRoomAccess })
 realtime.attach(io)
 
 if (env.usingDevJwtSecret) {

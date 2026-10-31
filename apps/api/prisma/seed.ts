@@ -8,6 +8,8 @@
  *   board        Product Launch: Todo / In Progress / Done, with three tasks
  *   read state   Alex has one unread DM from Sam
  *
+ * Both users can sign in with the DEVELOPMENT-ONLY password below.
+ *
  * Idempotent: users are upserted and the "acme" workspace is deleted (cascade)
  * and recreated on every run. Refuses to run when NODE_ENV=production.
  *
@@ -16,9 +18,13 @@
 import { directConversationKey, evenlySpacedPositions } from '@syncspace/shared'
 
 import { env } from '@/config/env'
+import { hashPassword } from '@/lib/password'
 import { disconnectPrisma, getPrisma } from '@/lib/prisma'
 
 const WORKSPACE_SLUG = 'acme'
+
+/** Development-only credentials for the seeded users (documented in README). */
+const SEED_PASSWORD = 'SyncSpace-dev-1'
 
 async function main(): Promise<void> {
   if (env.isProduction) {
@@ -28,15 +34,16 @@ async function main(): Promise<void> {
   const prisma = getPrisma()
 
   // Sequential on purpose: seeds favour simplicity and work on single-connection databases.
+  const passwordHash = await hashPassword(SEED_PASSWORD)
   const alex = await prisma.user.upsert({
     where: { email: 'alex@example.com' },
-    update: {},
-    create: { email: 'alex@example.com', name: 'Alex Rivera' },
+    update: { passwordHash },
+    create: { email: 'alex@example.com', name: 'Alex Rivera', passwordHash },
   })
   const sam = await prisma.user.upsert({
     where: { email: 'sam@example.com' },
-    update: {},
-    create: { email: 'sam@example.com', name: 'Sam Chen' },
+    update: { passwordHash },
+    create: { email: 'sam@example.com', name: 'Sam Chen', passwordHash },
   })
 
   await prisma.$transaction(async (tx) => {
@@ -265,7 +272,7 @@ async function main(): Promise<void> {
   })
 
   console.info(
-    `Seeded workspace "${WORKSPACE_SLUG}" with users alex@example.com and sam@example.com`,
+    `Seeded workspace "${WORKSPACE_SLUG}": sign in as alex@example.com or sam@example.com with password ${SEED_PASSWORD}`,
   )
 }
 

@@ -30,12 +30,12 @@ describe('GET /health', () => {
 })
 
 describe('GET /health/ready', () => {
-  it('reports the database as not configured when DATABASE_URL is absent', async () => {
-    const response = await request(app).get('/health/ready').expect(503)
+  it('reports the database as reachable', async () => {
+    const response = await request(app).get('/health/ready').expect(200)
 
     expect(readinessResponseSchema.parse(response.body)).toEqual({
-      status: 'unavailable',
-      checks: { database: 'not_configured' },
+      status: 'ok',
+      checks: { database: 'ok' },
     })
   })
 })

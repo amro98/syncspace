@@ -150,8 +150,8 @@ workspace removes them from its conversations automatically.
 
 Joining a room grants read access to everything broadcast into it, so room joins use the **same**
 rules: `workspace:<id>` requires `canViewWorkspace`; `channel:<id>` requires `canAccessChannel`;
-`conversation:<id>` requires `canAccessConversation`. Until the membership-backed
-`RoomAccessPolicy` is wired up (workspaces phase), the socket server denies every join.
+`conversation:<id>` requires `canAccessConversation`. Workspace and channel joins are enforced by
+`membershipRoomAccess`; conversation joins arrive with the messaging phase.
 
 ## Using the policy
 

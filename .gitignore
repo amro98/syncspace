@@ -9,6 +9,9 @@ build/
 # Generated
 apps/api/src/generated/
 
+# Local embedded PostgreSQL data (npm run db:local)
+apps/api/.pglite/
+
 # Environment (examples are committed)
 .env
 .env.*

@@ -6,15 +6,27 @@ import helmet from 'helmet'
 import { corsOptions } from '@/config/cors'
 import { env } from '@/config/env'
 import { errorHandler, notFoundHandler } from '@/middleware/error-handler'
+import { type AuthRateLimitOptions, createAuthRateLimiters } from '@/middleware/rate-limit'
 import { requestLogger } from '@/middleware/request-logger'
 import { verifyOrigin } from '@/middleware/verify-origin'
+import { createAuthRouter } from '@/modules/auth/auth.router'
+import { devMailRouter } from '@/modules/dev/dev-mail.router'
 import { healthRouter } from '@/modules/health/health.router'
+import { invitesRouter, workspacesRouter } from '@/modules/workspaces/workspaces.router'
+
+export interface AppOptions {
+  /** Auth rate limiting. Enabled by default except in tests (which opt in explicitly). */
+  rateLimit?: AuthRateLimitOptions
+}
 
 /**
  * Builds the Express application (no network side effects, so tests can mount
- * it with supertest). Feature modules are mounted under `/api/<resource>`.
+ * it with supertest). The API has its own origin, so resources mount at the
+ * root: /auth, /workspaces, /invites.
  */
-export function createApp(): Express {
+export function createApp({
+  rateLimit = { enabled: env.NODE_ENV !== 'test' },
+}: AppOptions = {}): Express {
   const app = express()
 
   // Render (and most PaaS) terminate TLS at a proxy; trust it for req.ip / secure cookies.
@@ -28,6 +40,12 @@ export function createApp(): Express {
   app.use(verifyOrigin)
 
   app.use('/health', healthRouter)
+  app.use('/auth', createAuthRouter(createAuthRateLimiters(rateLimit)))
+  app.use('/workspaces', workspacesRouter)
+  app.use('/invites', invitesRouter)
+
+  // Captured-mail viewer; exists only in development (never in test or production).
+  if (env.NODE_ENV === 'development') app.use('/dev/mail', devMailRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)

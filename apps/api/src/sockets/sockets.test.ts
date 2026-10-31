@@ -12,23 +12,14 @@ import {
 import { io as connect, type Socket as ClientSocket } from 'socket.io-client'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ACCESS_TOKEN_COOKIE } from '@/config/auth'
-import { signAccessToken } from '@/lib/tokens'
+import { getPrisma } from '@/lib/prisma'
+import { createUser, sessionCookie, uniqueSlug } from '@/test/helpers'
 
 import { createSocketServer, realtime } from './index'
-import type { RoomAccessPolicy } from './room-access'
+import { membershipRoomAccess, type RoomAccessPolicy } from './room-access'
 import type { TypedServer } from './types'
 
-const USER_ID = '01920000-7c00-7000-8000-0000000000a1'
-const WORKSPACE_ID = '01920000-7c00-7000-8000-0000000000b1'
-const NOTIFICATION_ID = '01920000-7c00-7000-8000-0000000000c1'
-
 type TestClient = ClientSocket<ServerToClientEvents, ClientToServerEvents>
-
-const allowAll: RoomAccessPolicy = {
-  canJoinWorkspace: () => Promise.resolve(true),
-  canJoinChannel: () => Promise.resolve(true),
-}
 
 let httpServer: HttpServer | undefined
 let io: TypedServer | undefined
@@ -43,11 +34,11 @@ async function startServer(roomAccess?: RoomAccessPolicy): Promise<string> {
   return `http://localhost:${String(port)}`
 }
 
-function createClient(url: string, userId?: string): TestClient {
+function createClient(url: string, cookie?: string): TestClient {
   const client: TestClient = connect(url, {
     transports: ['websocket'],
     reconnection: false,
-    extraHeaders: userId ? { cookie: `${ACCESS_TOKEN_COOKIE}=${signAccessToken(userId)}` } : {},
+    extraHeaders: cookie ? { cookie } : {},
   })
   clients.push(client)
   return client
@@ -60,6 +51,28 @@ function waitForConnect(client: TestClient): Promise<void> {
   })
 }
 
+/** A workspace with an owner, plus a private channel the owner is NOT a member of. */
+async function workspaceFixture() {
+  const owner = await createUser()
+  const prisma = getPrisma()
+  const workspace = await prisma.workspace.create({
+    data: {
+      name: 'Socket Co',
+      slug: uniqueSlug('socket'),
+      ownerId: owner.id,
+      members: { create: { userId: owner.id, role: 'OWNER' } },
+    },
+  })
+  const member = await createUser()
+  await prisma.workspaceMember.create({
+    data: { workspaceId: workspace.id, userId: member.id, role: 'MEMBER' },
+  })
+  const privateChannel = await prisma.channel.create({
+    data: { workspaceId: workspace.id, name: 'secret', slug: 'secret', type: 'PRIVATE' },
+  })
+  return { owner, member, workspace, privateChannel }
+}
+
 afterEach(async () => {
   for (const client of clients.splice(0)) client.disconnect()
   realtime.detach()
@@ -68,58 +81,102 @@ afterEach(async () => {
   httpServer = undefined
 })
 
-describe('socket server', () => {
+describe('socket authentication', () => {
   it('rejects connections without a session cookie', async () => {
     const client = createClient(await startServer())
-
     const error = await new Promise<Error & { data?: { code?: string } }>((resolve) => {
       client.once('connect_error', resolve)
     })
     expect(error.data?.code).toBe('UNAUTHENTICATED')
   })
 
-  it('denies room joins by default', async () => {
-    const client = createClient(await startServer(), USER_ID)
+  it('rejects revoked sessions', async () => {
+    const user = await createUser()
+    const cookie = sessionCookie(user)
+    await getPrisma().user.update({
+      where: { id: user.id },
+      data: { tokenVersion: { increment: 1 } },
+    })
+    const client = createClient(await startServer(), cookie)
+    await expect(waitForConnect(client)).rejects.toThrow()
+  })
+
+  it('denies room joins when no policy is configured', async () => {
+    const { owner, workspace } = await workspaceFixture()
+    const client = createClient(await startServer(), sessionCookie(owner))
     await waitForConnect(client)
 
     const ack: SocketAck = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, {
-      workspaceId: WORKSPACE_ID,
+      workspaceId: workspace.id,
     })
     expect(ack).toEqual({ ok: false, error: { code: 'FORBIDDEN', message: expect.any(String) } })
   })
+})
 
-  it('validates join payloads', async () => {
-    const client = createClient(await startServer(allowAll), USER_ID)
-    await waitForConnect(client)
-
-    const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, { workspaceId: '' })
-    expect(ack.ok).toBe(false)
-    expect(!ack.ok && ack.error.code).toBe('VALIDATION_ERROR')
-  })
-
-  it('delivers server events to joined rooms and to the personal user room', async () => {
-    const client = createClient(await startServer(allowAll), USER_ID)
+describe('membership room policy', () => {
+  it('lets members join their workspace room and receive events (and their user room)', async () => {
+    const { member, workspace } = await workspaceFixture()
+    const client = createClient(await startServer(membershipRoomAccess), sessionCookie(member))
     await waitForConnect(client)
 
     const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, {
-      workspaceId: WORKSPACE_ID,
+      workspaceId: workspace.id,
     })
     expect(ack).toEqual({ ok: true, data: null })
 
-    const workspaceUpdate = new Promise((resolve) => {
+    const update = new Promise((resolve) => {
       client.once(SERVER_EVENTS.WORKSPACE_UPDATED, resolve)
     })
-    realtime.emit(rooms.workspace(WORKSPACE_ID), SERVER_EVENTS.WORKSPACE_UPDATED, {
-      workspaceId: WORKSPACE_ID,
+    realtime.emit(rooms.workspace(workspace.id), SERVER_EVENTS.WORKSPACE_UPDATED, {
+      workspaceId: workspace.id,
     })
-    await expect(workspaceUpdate).resolves.toEqual({ workspaceId: WORKSPACE_ID })
+    await expect(update).resolves.toEqual({ workspaceId: workspace.id })
 
     const notification = new Promise((resolve) => {
       client.once(SERVER_EVENTS.NOTIFICATION_CREATED, resolve)
     })
-    realtime.emit(rooms.user(USER_ID), SERVER_EVENTS.NOTIFICATION_CREATED, {
-      notificationId: NOTIFICATION_ID,
+    realtime.emit(rooms.user(member.id), SERVER_EVENTS.NOTIFICATION_CREATED, {
+      notificationId: workspace.id,
     })
-    await expect(notification).resolves.toEqual({ notificationId: NOTIFICATION_ID })
+    await expect(notification).resolves.toEqual({ notificationId: workspace.id })
+  })
+
+  it('refuses workspace rooms to non-members', async () => {
+    const { workspace } = await workspaceFixture()
+    const outsider = await createUser()
+    const client = createClient(await startServer(membershipRoomAccess), sessionCookie(outsider))
+    await waitForConnect(client)
+
+    const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, {
+      workspaceId: workspace.id,
+    })
+    expect(!ack.ok && ack.error.code).toBe('FORBIDDEN')
+  })
+
+  it('applies the channel rules: private channels need membership (or admin oversight)', async () => {
+    const { owner, member, workspace, privateChannel } = await workspaceFixture()
+    const url = await startServer(membershipRoomAccess)
+    const payload = { workspaceId: workspace.id, channelId: privateChannel.id }
+
+    const memberClient = createClient(url, sessionCookie(member))
+    await waitForConnect(memberClient)
+    const denied = await memberClient.emitWithAck(CLIENT_EVENTS.CHANNEL_JOIN, payload)
+    expect(!denied.ok && denied.error.code).toBe('FORBIDDEN')
+
+    const ownerClient = createClient(url, sessionCookie(owner))
+    await waitForConnect(ownerClient)
+    expect(await ownerClient.emitWithAck(CLIENT_EVENTS.CHANNEL_JOIN, payload)).toEqual({
+      ok: true,
+      data: null,
+    })
+  })
+
+  it('validates join payloads', async () => {
+    const user = await createUser()
+    const client = createClient(await startServer(membershipRoomAccess), sessionCookie(user))
+    await waitForConnect(client)
+
+    const ack = await client.emitWithAck(CLIENT_EVENTS.WORKSPACE_JOIN, { workspaceId: '' })
+    expect(!ack.ok && ack.error.code).toBe('VALIDATION_ERROR')
   })
 })

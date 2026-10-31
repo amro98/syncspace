@@ -3,13 +3,13 @@
 SyncSpace is a real-time team workspace: Slack-style channels and direct messages combined with
 Trello-style task boards, in one app.
 
-> **Status: foundation + data model.** The architecture, tooling and infrastructure are in place
-> (monorepo, typed contracts, API skeleton, realtime layer, app shell, design tokens), along with
-> the full MVP database schema and the authorization policy. Product features are built on top of
-> it in the phases listed below.
+> **Status:** foundation, data model and **authentication + workspace onboarding** are done:
+> email/password and Google/GitHub sign-in, password reset, workspaces, invitations and the
+> workspace switcher. Chat and task boards come next (see the roadmap).
 
 - Architecture decisions: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Data model, invariants and delete rules: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
+- Authentication, sessions, OAuth setup, invites: [`docs/AUTH.md`](docs/AUTH.md)
 - Authorization rules: [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md)
 - Feature folder conventions: [`apps/web/src/features/README.md`](apps/web/src/features/README.md)
 
@@ -37,21 +37,21 @@ Trello-style task boards, in one app.
 │   │       ├── server.ts       HTTP + Socket.IO bootstrap, graceful shutdown
 │   │       ├── config/         validated env, CORS, auth constants
 │   │       ├── middleware/     logging, validation, auth, origin check, errors
-│   │       ├── modules/        feature modules (health so far)
+│   │       ├── modules/        auth (+ oauth), workspaces (+ invites), health, dev mail
 │   │       ├── sockets/        socket server, handshake auth, rooms, realtime publisher
-│   │       ├── lib/            logger, prisma, errors, tokens, permissions/
+│   │       ├── lib/            logger, prisma, errors, tokens, password, mail/, permissions/
 │   │       ├── utils/          small pure helpers
 │   │       └── types/          Express type augmentation
 │   └── web/                    React SPA
 │       └── src/
 │           ├── app/            router, providers, layouts (AppShell, AuthLayout)
 │           ├── components/     ui/ (shadcn primitives), shared/
-│           ├── features/       per-domain feature folders (added per phase)
-│           ├── hooks/  lib/  stores/  styles/  types/  test/
+│           ├── features/       auth, workspaces, invites, realtime (more per phase)
+│           ├── lib/  stores/  styles/  types/  test/
 ├── packages/
 │   └── shared/                 contracts shared by web and api
 │       └── src/  constants/  domain/  permissions/  schemas/  socket/  types/  index.ts
-├── docs/                       ARCHITECTURE.md, DATA_MODEL.md, PERMISSIONS.md
+├── docs/                       ARCHITECTURE.md, AUTH.md, DATA_MODEL.md, PERMISSIONS.md
 ├── eslint.config.js  .prettierrc.json  tsconfig.base.json
 └── package.json                npm workspaces + root scripts
 ```
@@ -62,7 +62,7 @@ Trello-style task boards, in one app.
 
 - **Node.js 22 LTS** recommended (`^20.19` or `>=22.12` supported)
 - **npm 10+** recommended
-- **PostgreSQL 15+** — needed for data features; the API itself boots without it (`/health` works)
+- **PostgreSQL 15+** for running the app (tests use an embedded PostgreSQL automatically)
 
 ### Install
 
@@ -79,18 +79,24 @@ cp apps/web/.env.example apps/web/.env
 
 **`apps/api/.env`**
 
-| Variable       | Default                 | Notes                                                             |
-| -------------- | ----------------------- | ----------------------------------------------------------------- |
-| `PORT`         | `4000`                  |                                                                   |
-| `NODE_ENV`     | `development`           | `development` \| `test` \| `production`                           |
-| `DATABASE_URL` | —                       | `postgresql://…`. Optional in development, required in production |
-| `FRONTEND_URL` | `http://localhost:5173` |                                                                   |
-| `CORS_ORIGIN`  | `http://localhost:5173` | Comma-separated list of allowed origins (credentials on)          |
-| `JWT_SECRET`   | dev fallback            | ≥ 32 chars. Required in production                                |
-| `LOG_LEVEL`    | `debug` (dev)           | `trace` … `fatal`, `silent`                                       |
+| Variable                                                                           | Default                 | Notes                                                                                     |
+| ---------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| `PORT`                                                                             | `4000`                  |                                                                                           |
+| `NODE_ENV`                                                                         | `development`           | `development` \| `test` \| `production`                                                   |
+| `DATABASE_URL`                                                                     | —                       | `postgresql://…`. Required to use the app (and in production)                             |
+| `FRONTEND_URL`                                                                     | `http://localhost:5173` | Web app URL for email links and OAuth redirects. Required in production                   |
+| `API_PUBLIC_URL`                                                                   | `http://localhost:4000` | API URL for OAuth callbacks. Required in production                                       |
+| `CORS_ORIGIN`                                                                      | `http://localhost:5173` | Comma-separated list of allowed origins (credentials on)                                  |
+| `JWT_SECRET`                                                                       | dev fallback            | ≥ 32 chars. Required in production                                                        |
+| `COOKIE_SAME_SITE` / `COOKIE_DOMAIN`                                               | `lax` / —               | Session cookie attributes (see docs/AUTH.md)                                              |
+| `GOOGLE_CLIENT_ID` / `_SECRET`                                                     | —                       | Enables Google sign-in                                                                    |
+| `GITHUB_CLIENT_ID` / `_SECRET`                                                     | —                       | Enables GitHub sign-in                                                                    |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | —                       | Outgoing email. Without SMTP, development captures mail at http://localhost:4000/dev/mail |
+| `LOG_LEVEL`                                                                        | `debug` (dev)           | `trace` … `fatal`, `silent`                                                               |
 
-Configuration is validated at startup (`apps/api/src/config/env.ts`). In production, a missing
-`DATABASE_URL` or a missing/weak `JWT_SECRET` stops the server immediately.
+Configuration is validated at startup (`apps/api/src/config/env.ts`). In production, missing
+`DATABASE_URL`, `FRONTEND_URL` or `API_PUBLIC_URL`, or a missing/weak `JWT_SECRET`, stops the
+server immediately. OAuth setup (console links, callback URLs): [`docs/AUTH.md`](docs/AUTH.md#provider-setup).
 
 **`apps/web/.env`**
 
@@ -100,11 +106,18 @@ Configuration is validated at startup (`apps/api/src/config/env.ts`). In product
 
 ### Database
 
+No PostgreSQL installed? `npm run db:local --workspace @syncspace/api` serves an embedded
+PostgreSQL (PGlite) on port 54329 with data kept in `apps/api/.pglite/` — development only. Use
+`DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54329/postgres?sslmode=disable`.
+
 ```bash
 # with DATABASE_URL set in apps/api/.env
-npm run db:migrate   # apply migrations (creates the database schema)
-npm run db:seed      # demo data: alex@example.com (owner), sam@example.com (member), workspace "acme"
+npm run db:migrate   # apply migrations (or `npm run db:deploy --workspace @syncspace/api`)
+npm run db:seed      # demo workspace "acme" with two users (below)
 ```
+
+Seeded **development-only** accounts (password `SyncSpace-dev-1`): `alex@example.com` (owner)
+and `sam@example.com` (member). The seed refuses to run in production.
 
 ### Run
 
@@ -112,8 +125,9 @@ npm run db:seed      # demo data: alex@example.com (owner), sam@example.com (mem
 npm run dev
 ```
 
-- Web: http://localhost:5173 — the top bar shows **API online** when the web app can reach the API
+- Web: http://localhost:5173 — register or sign in; new users are guided through creating a workspace
 - API: http://localhost:4000/health (liveness) and http://localhost:4000/health/ready (database)
+- Dev mail (password resets, invitations): http://localhost:4000/dev/mail
 
 ## Scripts
 
@@ -136,14 +150,14 @@ Run from the repository root.
 | `npm run db:seed`      | Development seed data (refuses to run in production)       |
 | `npm run db:studio`    | Prisma Studio                                              |
 
-**Database invariant tests** (constraints, triggers, cascades) run against a real, migrated
-PostgreSQL and are skipped unless `TEST_DATABASE_URL` is set:
+**API tests run against a real PostgreSQL engine with no setup:** the suite starts an embedded
+PGlite database and applies the migrations. To use a regular PostgreSQL server instead, point
+`TEST_DATABASE_URL` at a dedicated, migrated database:
 
 ```bash
-TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/syncspace_test npm run test --workspace @syncspace/api
+DATABASE_URL=<url> npm run db:deploy --workspace @syncspace/api
+TEST_DATABASE_URL=<url> npm run test --workspace @syncspace/api
 ```
-
-Use a dedicated database (apply migrations to it first with `DATABASE_URL=<same url> npm run db:deploy --workspace @syncspace/api`).
 
 Workspace-specific: `npm run <script> --workspace @syncspace/<web|api|shared>`
 (e.g. `npm run test:watch --workspace @syncspace/web`).
@@ -183,16 +197,16 @@ The full reasoning is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
-| Phase | Scope                                                                                          |
-| ----- | ---------------------------------------------------------------------------------------------- |
-| 0     | ✅ **Foundation** — monorepo, contracts, API/realtime skeleton, app shell, tokens              |
-| 1     | ✅ **Database schema + permissions** — MVP schema, migration, invariants, policy, seed         |
-| 2     | Authentication — register/login/logout, refresh rotation, session query, route guards          |
-| 3     | Workspaces, members and roles — CRUD, invitations, room-access policy                          |
-| 4     | Channels and direct messages — lists, membership, navigation                                   |
-| 5     | Real-time messaging — send/edit/delete, history pagination, virtualization, replies, reactions |
-| 6     | Presence and typing indicators                                                                 |
-| 7     | Attachments — file/image upload and previews                                                   |
-| 8     | Kanban boards and tasks — columns, drag and drop, assignees, priorities, due dates             |
-| 9     | Notifications and search                                                                       |
-| 10    | Polish and deployment — responsive pass, accessibility, Vercel + Render + PostgreSQL           |
+| Phase | Scope                                                                                             |
+| ----- | ------------------------------------------------------------------------------------------------- |
+| 0     | ✅ **Foundation** — monorepo, contracts, API/realtime skeleton, app shell, tokens                 |
+| 1     | ✅ **Database schema + permissions** — MVP schema, migration, invariants, policy, seed            |
+| 2     | ✅ **Auth + onboarding** — password & Google/GitHub sign-in, reset, workspaces, invites, switcher |
+| 3     | Members and roles — member list, role changes, removal, ownership transfer, pending invites       |
+| 4     | Channels and direct messages — lists, membership, navigation                                      |
+| 5     | Real-time messaging — send/edit/delete, history pagination, virtualization, replies, reactions    |
+| 6     | Presence and typing indicators                                                                    |
+| 7     | Attachments — file/image upload and previews                                                      |
+| 8     | Kanban boards and tasks — columns, drag and drop, assignees, priorities, due dates                |
+| 9     | Notifications and search                                                                          |
+| 10    | Polish and deployment — responsive pass, accessibility, Vercel + Render + PostgreSQL              |

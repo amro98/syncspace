@@ -1,8 +1,6 @@
 /**
- * Database invariant tests. They need a migrated PostgreSQL database and run
- * only when TEST_DATABASE_URL is set; otherwise the whole suite is skipped.
- *
- *   TEST_DATABASE_URL=postgresql://... npm run test --workspace @syncspace/api
+ * Database invariant tests, run against the test database provided by
+ * src/test/global-setup.ts (embedded PGlite, or TEST_DATABASE_URL when set).
  *
  * Every test creates its own users/workspace with unique emails and slugs and
  * removes them afterwards, so the suite can run against a shared dev database.
@@ -11,11 +9,11 @@ import { randomUUID } from 'node:crypto'
 
 import { PrismaPg } from '@prisma/adapter-pg'
 import { directConversationKey } from '@syncspace/shared'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest'
 
 import { PrismaClient } from '@/generated/prisma/client'
 
-const connectionString = process.env.TEST_DATABASE_URL
+const connectionString = inject('databaseUrl')
 
 /** Collects the messages of an error and its causes, for matching constraint names. */
 function describeError(error: unknown): string {
@@ -32,7 +30,7 @@ function describeError(error: unknown): string {
 }
 
 function createClient(): PrismaClient {
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: connectionString ?? '' }) })
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
 }
 
 /**
@@ -60,7 +58,7 @@ async function expectDbError(
   }
 }
 
-describe.skipIf(!connectionString)('database invariants (PostgreSQL)', () => {
+describe('database invariants (PostgreSQL)', () => {
   let prisma: PrismaClient
   const createdWorkspaceIds: string[] = []
   const createdUserIds: string[] = []

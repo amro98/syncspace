@@ -5,8 +5,9 @@ import request from 'supertest'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { ACCESS_TOKEN_COOKIE } from '@/config/auth'
-import { signAccessToken } from '@/lib/tokens'
+import { SESSION_COOKIE } from '@/config/auth'
+import { getPrisma } from '@/lib/prisma'
+import { createUser, sessionCookie, setCookies } from '@/test/helpers'
 
 import { errorHandler } from './error-handler'
 import { requestLogger } from './request-logger'
@@ -41,8 +42,6 @@ function createTestApp() {
 
 const app = createTestApp()
 
-const USER_ID = '01920000-7c00-7000-8000-0000000000a1'
-
 describe('validate middleware', () => {
   it('passes parsed and coerced input to the handler', async () => {
     const response = await request(app)
@@ -75,18 +74,35 @@ describe('requireAuth middleware', () => {
     expect(apiErrorResponseSchema.parse(response.body).error.code).toBe('UNAUTHENTICATED')
   })
 
-  it('rejects tampered tokens', async () => {
-    const token = `${signAccessToken(USER_ID)}x`
-    await request(app).get('/me').set('Cookie', `${ACCESS_TOKEN_COOKIE}=${token}`).expect(401)
+  it('rejects tampered tokens and clears the cookie', async () => {
+    const user = await createUser()
+    const response = await request(app)
+      .get('/me')
+      .set('Cookie', `${sessionCookie(user)}x`)
+      .expect(401)
+    expect(setCookies(response).get(SESSION_COOKIE)).toMatch(/Expires=Thu, 01 Jan 1970/)
   })
 
   it('exposes the authenticated user id', async () => {
-    const token = signAccessToken(USER_ID)
-    const response = await request(app)
-      .get('/me')
-      .set('Cookie', `${ACCESS_TOKEN_COOKIE}=${token}`)
-      .expect(200)
+    const user = await createUser()
+    const response = await request(app).get('/me').set('Cookie', sessionCookie(user)).expect(200)
+    expect(response.body).toEqual({ userId: user.id })
+  })
 
-    expect(response.body).toEqual({ userId: USER_ID })
+  it('rejects sessions revoked by a token-version bump', async () => {
+    const user = await createUser()
+    const cookie = sessionCookie(user)
+    await getPrisma().user.update({
+      where: { id: user.id },
+      data: { tokenVersion: { increment: 1 } },
+    })
+    await request(app).get('/me').set('Cookie', cookie).expect(401)
+  })
+
+  it('rejects sessions of deleted users', async () => {
+    const user = await createUser()
+    const cookie = sessionCookie(user)
+    await getPrisma().user.delete({ where: { id: user.id } })
+    await request(app).get('/me').set('Cookie', cookie).expect(401)
   })
 })

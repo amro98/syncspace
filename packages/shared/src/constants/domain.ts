@@ -17,6 +17,10 @@ export const ASSIGNABLE_WORKSPACE_ROLES = [
 ] as const satisfies readonly WorkspaceRole[]
 export type AssignableWorkspaceRole = (typeof ASSIGNABLE_WORKSPACE_ROLES)[number]
 
+/** Social sign-in providers (Prisma enum `AuthProvider`). */
+export const AUTH_PROVIDERS = ['GOOGLE', 'GITHUB'] as const
+export type AuthProvider = (typeof AUTH_PROVIDERS)[number]
+
 export const CHANNEL_TYPES = ['PUBLIC', 'PRIVATE'] as const
 export type ChannelType = (typeof CHANNEL_TYPES)[number]
 

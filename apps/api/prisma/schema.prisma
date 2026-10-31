@@ -56,6 +56,11 @@ enum NotificationType {
   SYSTEM
 }
 
+enum AuthProvider {
+  GOOGLE
+  GITHUB
+}
+
 enum NotificationEntityType {
   WORKSPACE
   CHANNEL
@@ -76,8 +81,10 @@ model User {
   email        String    @unique
   name         String
   avatarUrl    String?   @map("avatar_url")
-  /// Null until password auth is set up (or for future OAuth-only accounts).
+  /// bcrypt hash. Null for social-only accounts until they set a password via the reset flow.
   passwordHash String?   @map("password_hash")
+  /// Embedded in every session JWT; incrementing it (password reset) invalidates all sessions.
+  tokenVersion Int       @default(0) @map("token_version")
   /// Coarse "last active" timestamp. Live presence is realtime-only and never persisted.
   lastSeenAt   DateTime? @map("last_seen_at") @db.Timestamptz(3)
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -98,8 +105,45 @@ model User {
   taskAssignments          TaskAssignee[]
   notifications            Notification[]            @relation("NotificationRecipient")
   notificationsTriggered   Notification[]            @relation("NotificationActor")
+  authAccounts             AuthAccount[]
+  passwordResetTokens      PasswordResetToken[]
 
   @@map("users")
+}
+
+/// A linked social login (Google, GitHub). A user may link each provider once; a provider account
+/// belongs to exactly one user.
+model AuthAccount {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  provider          AuthProvider
+  /// The provider's stable subject id (Google `sub`, GitHub numeric user id) — never the email.
+  providerAccountId String       @map("provider_account_id")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  // One account per provider per user; also serves "linked providers of user Y".
+  @@unique([userId, provider])
+  @@map("auth_accounts")
+}
+
+/// One-time password reset token. Only the SHA-256 hash of the emailed token is stored.
+model PasswordResetToken {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Invalidating a user's older tokens; user-deletion cascade.
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ---------------------------------------------------------------------------

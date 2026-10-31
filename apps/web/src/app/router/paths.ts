@@ -7,17 +7,39 @@ import { generatePath } from 'react-router'
 export const routePatterns = {
   login: '/login',
   register: '/register',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
+  socialConfirm: '/auth/social/confirm',
+  socialLink: '/auth/social/link',
+  invite: '/invite/:token',
   app: '/app',
+  onboarding: '/app/onboarding',
   workspace: '/app/workspaces/:workspaceId',
   channel: '/app/workspaces/:workspaceId/channel/:channelId',
   tasks: '/app/workspaces/:workspaceId/tasks',
   settings: '/app/workspaces/:workspaceId/settings',
 } as const
 
+/** Appends `?redirect=` (and other params) only when present. */
+function withQuery(path: string, params: Record<string, string | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value)
+  }
+  const query = search.toString()
+  return query ? `${path}?${query}` : path
+}
+
 export const paths = {
-  login: () => routePatterns.login,
-  register: () => routePatterns.register,
+  login: (options: { redirect?: string; error?: string } = {}) =>
+    withQuery(routePatterns.login, options),
+  register: (options: { redirect?: string; email?: string } = {}) =>
+    withQuery(routePatterns.register, options),
+  forgotPassword: (options: { email?: string } = {}) =>
+    withQuery(routePatterns.forgotPassword, options),
+  invite: (token: string) => generatePath(routePatterns.invite, { token }),
   app: () => routePatterns.app,
+  onboarding: (options: { step?: 'create' } = {}) => withQuery(routePatterns.onboarding, options),
   workspace: (workspaceId: string) => generatePath(routePatterns.workspace, { workspaceId }),
   channel: (workspaceId: string, channelId: string) =>
     generatePath(routePatterns.channel, { workspaceId, channelId }),

@@ -1,4 +1,5 @@
 import {
+  AUTH_PROVIDERS,
   CHANNEL_TYPES,
   CONVERSATION_TYPES,
   NOTIFICATION_ENTITY_TYPES,
@@ -21,6 +22,7 @@ type Assert<T extends true> = T
 /** Compile-time parity: typecheck fails if any union differs. */
 export type EnumParity = [
   Assert<Equals<PrismaEnums.WorkspaceRole, (typeof WORKSPACE_ROLES)[number]>>,
+  Assert<Equals<PrismaEnums.AuthProvider, (typeof AUTH_PROVIDERS)[number]>>,
   Assert<Equals<PrismaEnums.ChannelType, (typeof CHANNEL_TYPES)[number]>>,
   Assert<Equals<PrismaEnums.ConversationType, (typeof CONVERSATION_TYPES)[number]>>,
   Assert<Equals<PrismaEnums.TaskPriority, (typeof TASK_PRIORITIES)[number]>>,
@@ -30,6 +32,7 @@ export type EnumParity = [
 
 const pairs = [
   ['WorkspaceRole', PrismaEnums.WorkspaceRole, WORKSPACE_ROLES],
+  ['AuthProvider', PrismaEnums.AuthProvider, AUTH_PROVIDERS],
   ['ChannelType', PrismaEnums.ChannelType, CHANNEL_TYPES],
   ['ConversationType', PrismaEnums.ConversationType, CONVERSATION_TYPES],
   ['TaskPriority', PrismaEnums.TaskPriority, TASK_PRIORITIES],

@@ -38,6 +38,10 @@ export const notFound = (message = 'Resource not found') => new AppError('NOT_FO
 
 export const conflict = (message = 'Resource conflict') => new AppError('CONFLICT', message)
 
+export const rateLimited = (
+  message = 'Too many attempts. Please wait a few minutes and try again.',
+) => new AppError('RATE_LIMITED', message)
+
 /** Errors raised by body-parser carry a `type` and an HTTP `status`. */
 function isBodyParserError(error: unknown): error is Error & { type: string; status: number } {
   return (
