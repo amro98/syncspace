@@ -94,6 +94,8 @@ export default defineConfig([
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
+      // supertest/socket payloads are untyped JSON; tests assert on them directly.
+      '@typescript-eslint/no-unsafe-member-access': 'off',
     },
   },
 

@@ -10,6 +10,7 @@ import { type AuthRateLimitOptions, createAuthRateLimiters } from '@/middleware/
 import { requestLogger } from '@/middleware/request-logger'
 import { verifyOrigin } from '@/middleware/verify-origin'
 import { createAuthRouter } from '@/modules/auth/auth.router'
+import { messagesRouter } from '@/modules/chat/chat.router'
 import { devMailRouter } from '@/modules/dev/dev-mail.router'
 import { healthRouter } from '@/modules/health/health.router'
 import { invitesRouter, workspacesRouter } from '@/modules/workspaces/workspaces.router'
@@ -22,7 +23,7 @@ export interface AppOptions {
 /**
  * Builds the Express application (no network side effects, so tests can mount
  * it with supertest). The API has its own origin, so resources mount at the
- * root: /auth, /workspaces, /invites.
+ * root: /auth, /workspaces, /invites, /messages.
  */
 export function createApp({
   rateLimit = { enabled: env.NODE_ENV !== 'test' },
@@ -43,6 +44,7 @@ export function createApp({
   app.use('/auth', createAuthRouter(createAuthRateLimiters(rateLimit)))
   app.use('/workspaces', workspacesRouter)
   app.use('/invites', invitesRouter)
+  app.use('/messages', messagesRouter)
 
   // Captured-mail viewer; exists only in development (never in test or production).
   if (env.NODE_ENV === 'development') app.use('/dev/mail', devMailRouter)

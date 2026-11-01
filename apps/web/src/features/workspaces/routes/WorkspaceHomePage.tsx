@@ -10,7 +10,7 @@ import { useCurrentWorkspaceId, useWorkspace, useWorkspaceActor } from '../hooks
 
 const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Admin', MEMBER: 'Member' } as const
 
-/** Workspace overview. Channels and boards plug in here in their phases. */
+/** Workspace overview (role, members, invite call-to-action). Boards plug in later. */
 export function WorkspaceHomePage() {
   const workspaceId = useCurrentWorkspaceId()
   const { data: workspace } = useWorkspace(workspaceId)

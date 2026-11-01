@@ -37,7 +37,7 @@ describe('/app default destination', () => {
     const { router } = renderRoute('/app')
 
     expect(await screen.findByRole('heading', { name: 'Globex' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(`/app/workspaces/${globex.id}`)
+    expect(router.state.location.pathname).toBe(`/app/workspaces/${globex.id}/overview`)
   })
 
   it('ignores a remembered workspace the user no longer belongs to', async () => {
@@ -46,7 +46,7 @@ describe('/app default destination', () => {
     const { router } = renderRoute('/app')
 
     await screen.findByRole('heading', { name: 'Acme Inc.' })
-    expect(router.state.location.pathname).toBe(`/app/workspaces/${acme.id}`)
+    expect(router.state.location.pathname).toBe(`/app/workspaces/${acme.id}/overview`)
   })
 })
 
@@ -92,7 +92,7 @@ describe('onboarding', () => {
 
     await user.click(screen.getByRole('button', { name: /Go to Rocket Team/ }))
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe(`/app/workspaces/${created.id}`)
+      expect(router.state.location.pathname).toBe(`/app/workspaces/${created.id}/overview`)
     })
     expect(useWorkspacePrefsStore.getState().lastWorkspaceId).toBe(created.id)
   })
@@ -135,7 +135,7 @@ describe('workspace switcher and access', () => {
 
     await user.click(within(list).getByRole('link', { name: /Globex.*Member/ }))
     expect(await screen.findByRole('heading', { name: 'Globex' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(`/app/workspaces/${globex.id}`)
+    expect(router.state.location.pathname).toBe(`/app/workspaces/${globex.id}/overview`)
   })
 
   it('shows a friendly page for workspaces the user cannot access', async () => {
@@ -211,7 +211,7 @@ describe('invitations', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Accept invitation' }))
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe(`/app/workspaces/${acme.id}`)
+      expect(router.state.location.pathname).toBe(`/app/workspaces/${acme.id}/overview`)
     })
     expect(calls.find((call) => call.path === '/invites/accept')?.body).toEqual({ token })
   })

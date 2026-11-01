@@ -55,7 +55,10 @@ export interface MockRequest {
   url: URL
 }
 
-export type MockRoutes = Record<string, MockReply | ((request: MockRequest) => MockReply)>
+export type MockRoutes = Record<
+  string,
+  MockReply | ((request: MockRequest) => MockReply | Promise<MockReply>)
+>
 
 export interface ApiCall {
   method: string
@@ -85,8 +88,11 @@ export function mockApi(routes: MockRoutes) {
       )
     }
     const reply = typeof route === 'function' ? route({ body, url }) : route
-    if (reply.status === 204) return Promise.resolve(new Response(null, { status: 204 }))
-    return Promise.resolve(jsonResponse(reply.body ?? {}, { status: reply.status ?? 200 }))
+    return Promise.resolve(reply).then((settled) =>
+      settled.status === 204
+        ? new Response(null, { status: 204 })
+        : jsonResponse(settled.body ?? {}, { status: settled.status ?? 200 }),
+    )
   })
   vi.stubGlobal('fetch', fetchMock)
   return { calls, fetchMock }
@@ -142,7 +148,10 @@ export function workspaceDetail(
   }
 }
 
-/** Routes for a signed-in user who belongs to `workspaces`. */
+/**
+ * Routes for a signed-in user who belongs to `workspaces`. Each workspace has
+ * empty chat lists unless the caller overrides those routes.
+ */
 export function signedInRoutes(
   options: { user?: AuthUser; workspaces?: WorkspaceDetail[] } = {},
 ): MockRoutes {
@@ -165,8 +174,12 @@ export function signedInRoutes(
     },
     'POST /auth/logout': { status: 204 },
   }
-  for (const workspace of workspaces)
+  for (const workspace of workspaces) {
     routes[`GET /workspaces/${workspace.id}`] = { body: workspace }
+    routes[`GET /workspaces/${workspace.id}/channels`] = { body: { items: [] } }
+    routes[`GET /workspaces/${workspace.id}/conversations`] = { body: { items: [] } }
+    routes[`GET /workspaces/${workspace.id}/members`] = { body: { items: [] } }
+  }
   return routes
 }
 

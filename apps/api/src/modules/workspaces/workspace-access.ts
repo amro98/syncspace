@@ -38,7 +38,7 @@ export const requireWorkspaceMember: RequestHandler = async (req, _res, next) =>
   next()
 }
 
-export function getWorkspaceAccess(req: Request): WorkspaceAccess {
+export function getWorkspaceAccess(req: Pick<Request, 'workspaceAccess'>): WorkspaceAccess {
   if (!req.workspaceAccess) {
     throw new Error('requireWorkspaceMember must run before this handler')
   }

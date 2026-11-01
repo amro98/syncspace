@@ -6,6 +6,8 @@ import { paths } from '@/app/router/paths'
 import { FullPageSpinner } from '@/components/shared/Spinner'
 import { buttonVariants } from '@/components/ui/button'
 import { errorMessage } from '@/features/auth/messages'
+import { useWorkspaceMembers } from '@/features/chat/hooks'
+import { useChatRealtime } from '@/features/chat/realtime'
 import { useWorkspaceRoom } from '@/features/realtime/hooks'
 import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
 
@@ -26,7 +28,8 @@ function WorkspaceUnavailable({ message }: { message: string }) {
 /**
  * Bootstraps `/app/workspaces/:workspaceId/*`: loads the workspace and the
  * user's membership (the API answers 404 to non-members), remembers it as the
- * last workspace, joins its realtime room, and renders the app shell.
+ * last workspace, joins its realtime room, subscribes the chat caches to
+ * realtime events, and renders the app shell.
  */
 export function WorkspaceLayout() {
   const workspaceId = useCurrentWorkspaceId()
@@ -39,6 +42,9 @@ export function WorkspaceLayout() {
   }, [loaded, workspaceId, setLastWorkspaceId])
 
   useWorkspaceRoom(workspaceId)
+  useChatRealtime(workspaceId)
+  // The directory feeds presence dots, typing names and pickers across the workspace.
+  useWorkspaceMembers(workspaceId)
 
   if (workspace.isPending) return <FullPageSpinner label="Loading workspace" />
   if (workspace.isError) {

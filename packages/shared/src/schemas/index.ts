@@ -1,5 +1,6 @@
 export * from './api'
 export * from './auth'
+export * from './chat'
 export * from './common'
 export * from './domain'
 export * from './read-state'

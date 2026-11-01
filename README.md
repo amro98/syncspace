@@ -3,14 +3,16 @@
 SyncSpace is a real-time team workspace: Slack-style channels and direct messages combined with
 Trello-style task boards, in one app.
 
-> **Status:** foundation, data model and **authentication + workspace onboarding** are done:
-> email/password and Google/GitHub sign-in, password reset, workspaces, invitations and the
-> workspace switcher. Chat and task boards come next (see the roadmap).
+> **Status:** foundation, data model, authentication + workspace onboarding and **channels +
+> real-time chat** are done: public/private channels, DMs and groups, threads, reactions,
+> edit/delete with moderation, unread counts, typing indicators, presence and message search.
+> Task boards come next (see the roadmap).
 
 - Architecture decisions: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Data model, invariants and delete rules: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
 - Authentication, sessions, OAuth setup, invites: [`docs/AUTH.md`](docs/AUTH.md)
 - Authorization rules: [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md)
+- Chat, realtime events, read state, presence and typing: [`docs/CHAT.md`](docs/CHAT.md)
 - Feature folder conventions: [`apps/web/src/features/README.md`](apps/web/src/features/README.md)
 
 ## Tech stack
@@ -203,10 +205,10 @@ The full reasoning is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 | 1     | ✅ **Database schema + permissions** — MVP schema, migration, invariants, policy, seed            |
 | 2     | ✅ **Auth + onboarding** — password & Google/GitHub sign-in, reset, workspaces, invites, switcher |
 | 3     | Members and roles — member list, role changes, removal, ownership transfer, pending invites       |
-| 4     | Channels and direct messages — lists, membership, navigation                                      |
-| 5     | Real-time messaging — send/edit/delete, history pagination, virtualization, replies, reactions    |
-| 6     | Presence and typing indicators                                                                    |
+| 4     | ✅ **Channels and direct messages** — lists, private membership, archive, DMs/groups, navigation  |
+| 5     | ✅ **Real-time messaging** — optimistic send, edit/delete, pagination, threads, reactions, unread |
+| 6     | ✅ **Presence and typing indicators** (+ workspace message search)                                |
 | 7     | Attachments — file/image upload and previews                                                      |
 | 8     | Kanban boards and tasks — columns, drag and drop, assignees, priorities, due dates                |
-| 9     | Notifications and search                                                                          |
+| 9     | Notifications (search basics shipped with chat; full-text ranking later)                          |
 | 10    | Polish and deployment — responsive pass, accessibility, Vercel + Render + PostgreSQL              |

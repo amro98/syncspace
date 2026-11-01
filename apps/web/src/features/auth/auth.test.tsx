@@ -31,7 +31,7 @@ describe('route guards', () => {
     const { router } = renderRoute('/login')
 
     expect(await screen.findByRole('heading', { name: 'Acme Inc.' })).toBeInTheDocument()
-    expect(router.state.location.pathname).toBe(`/app/workspaces/${ids.workspace}`)
+    expect(router.state.location.pathname).toBe(`/app/workspaces/${ids.workspace}/overview`)
   })
 })
 

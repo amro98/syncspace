@@ -40,10 +40,29 @@ export const fakeSocket = {
   emitWithAck: vi.fn((_event: string, _payload: unknown) =>
     Promise.resolve({ ok: true as const, data: null }),
   ),
+  /** Fire-and-forget client events (typing). */
+  emit: vi.fn((_event: string, _payload: unknown) => fakeSocket),
+}
+
+/** Simulates an event pushed by the server (e.g. `message:created`). */
+export function serverEmit(event: string, payload: unknown) {
+  emitLocal(event, payload)
+}
+
+/** Simulates a dropped connection and a later reconnect. */
+export function simulateDisconnect() {
+  fakeSocket.connected = false
+  emitLocal('disconnect', 'transport close')
+}
+
+export function simulateReconnect() {
+  fakeSocket.connected = true
+  emitLocal('connect')
 }
 
 export function resetFakeSocket() {
   handlers.clear()
   fakeSocket.connected = false
   fakeSocket.emitWithAck.mockClear()
+  fakeSocket.emit.mockClear()
 }

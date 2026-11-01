@@ -12,3 +12,8 @@ export function isUniqueViolation(error: unknown, field?: string): boolean {
   if (!field) return true
   return JSON.stringify(error.meta ?? {}).includes(field)
 }
+
+/** True when an update/delete targeted a row that no longer exists. */
+export function isRecordNotFound(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025'
+}

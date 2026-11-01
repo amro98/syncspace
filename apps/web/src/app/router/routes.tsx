@@ -22,7 +22,8 @@ import { RoutePlaceholder } from './RoutePlaceholder'
  * - Open: reset password, social confirmation, invitations (work either way).
  * - /app/*: requires a session; workspace routes additionally require membership.
  *
- * Channel and task pages are placeholders until their feature phases.
+ * The workspace index opens its first channel; channels and DMs are addressed
+ * by URL. The task board is a placeholder until its phase.
  *
  * The signed-in area (/app/*) is code-split: sign-in pages do not download the
  * workspace UI or the realtime client.
@@ -73,9 +74,22 @@ export const routes: RouteObject[] = [
             children: [
               {
                 index: true,
+                lazy: async () => ({
+                  Component: (await import('./app-area')).WorkspaceIndexRedirect,
+                }),
+              },
+              {
+                path: routePatterns.overview,
                 lazy: async () => ({ Component: (await import('./app-area')).WorkspaceHomePage }),
               },
-              { path: routePatterns.channel, element: <RoutePlaceholder title="Channel" /> },
+              {
+                path: routePatterns.channel,
+                lazy: async () => ({ Component: (await import('./app-area')).ChannelPage }),
+              },
+              {
+                path: routePatterns.dm,
+                lazy: async () => ({ Component: (await import('./app-area')).ConversationPage }),
+              },
               { path: routePatterns.tasks, element: <RoutePlaceholder title="Tasks" /> },
               {
                 path: routePatterns.settings,

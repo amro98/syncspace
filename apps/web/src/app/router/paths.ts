@@ -15,7 +15,9 @@ export const routePatterns = {
   app: '/app',
   onboarding: '/app/onboarding',
   workspace: '/app/workspaces/:workspaceId',
+  overview: '/app/workspaces/:workspaceId/overview',
   channel: '/app/workspaces/:workspaceId/channel/:channelId',
+  dm: '/app/workspaces/:workspaceId/dm/:conversationId',
   tasks: '/app/workspaces/:workspaceId/tasks',
   settings: '/app/workspaces/:workspaceId/settings',
 } as const
@@ -41,8 +43,11 @@ export const paths = {
   app: () => routePatterns.app,
   onboarding: (options: { step?: 'create' } = {}) => withQuery(routePatterns.onboarding, options),
   workspace: (workspaceId: string) => generatePath(routePatterns.workspace, { workspaceId }),
+  overview: (workspaceId: string) => generatePath(routePatterns.overview, { workspaceId }),
   channel: (workspaceId: string, channelId: string) =>
     generatePath(routePatterns.channel, { workspaceId, channelId }),
+  dm: (workspaceId: string, conversationId: string) =>
+    generatePath(routePatterns.dm, { workspaceId, conversationId }),
   tasks: (workspaceId: string) => generatePath(routePatterns.tasks, { workspaceId }),
   settings: (workspaceId: string) => generatePath(routePatterns.settings, { workspaceId }),
 } as const

@@ -8,3 +8,9 @@ export function toValidationIssues(error: z.ZodError): ValidationIssue[] {
     message: issue.message,
   }))
 }
+
+/** Treats empty or whitespace-only strings as "not set" (clears optional text fields). */
+export function emptyToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? ''
+  return trimmed.length > 0 ? trimmed : null
+}

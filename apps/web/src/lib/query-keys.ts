@@ -53,6 +53,8 @@ export const queryKeys = {
       [...queryKeys.workspaces.detail(workspaceId), 'channels'] as const,
     detail: (workspaceId: string, channelId: string) =>
       [...queryKeys.channels.list(workspaceId), channelId] as const,
+    members: (workspaceId: string, channelId: string) =>
+      [...queryKeys.channels.detail(workspaceId, channelId), 'members'] as const,
   },
 
   conversations: {
@@ -70,6 +72,11 @@ export const queryKeys = {
       [...queryKeys.messages.all(), 'conversation', conversationId, filters] as const,
     thread: (parentMessageId: string) =>
       [...queryKeys.messages.all(), 'thread', parentMessageId] as const,
+    /** The main timeline of a channel or conversation. */
+    destination: (destination: { kind: 'channel' | 'conversation'; id: string }) =>
+      destination.kind === 'channel'
+        ? queryKeys.messages.channel(destination.id)
+        : queryKeys.messages.conversation(destination.id),
   },
 
   boards: {

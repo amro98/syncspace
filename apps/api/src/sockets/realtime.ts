@@ -34,4 +34,12 @@ export const realtime = {
     }
     io.to(room).emit(event, ...args)
   },
+
+  /**
+   * Makes every socket currently in `from` (e.g. `user:<id>`) leave `room` —
+   * used when access is revoked, so no further broadcasts reach those sockets.
+   */
+  leaveRoom(from: RoomName, room: RoomName): void {
+    io?.in(from).socketsLeave(room)
+  },
 }

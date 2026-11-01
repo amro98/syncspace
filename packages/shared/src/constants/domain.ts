@@ -51,6 +51,9 @@ export const NOTIFICATION_ENTITY_TYPES = [
 ] as const
 export type NotificationEntityType = (typeof NOTIFICATION_ENTITY_TYPES)[number]
 
+/** A GROUP conversation has the creator plus at least this many others (fewer = a DM). */
+export const GROUP_CONVERSATION_MIN_OTHERS = 2
+
 /** Field limits shared by client-side forms and server-side validation. */
 export const LIMITS = {
   USER_NAME_MAX: 80,

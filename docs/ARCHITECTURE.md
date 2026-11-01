@@ -114,7 +114,7 @@ Every mutation of persistent data follows this exact order:
 | ------------------------------- | ---------------------------------------------- |
 | `workspace:<workspaceId>`       | sockets currently viewing that workspace       |
 | `channel:<channelId>`           | sockets currently viewing that channel         |
-| `conversation:<conversationId>` | participants of a direct-message conversation  |
+| `conversation:<conversationId>` | open conversation (participants only)          |
 | `user:<userId>`                 | every socket of one user (multi-tab / devices) |
 
 **Rules.**
@@ -128,7 +128,7 @@ Every mutation of persistent data follows this exact order:
 
 **Event naming.**
 
-- Client → server commands: `<entity>:<verb>` (`workspace:join`, `channel:leave`).
+- Client → server commands: `<entity>:<verb>` (`workspace:join`, `channel:leave`, `typing:start`).
 - Server → client facts: `<entity>:<past-tense>` (`workspace:updated`, `notification:created`).
 - Names live in `CLIENT_EVENTS` / `SERVER_EVENTS`; payload types in `ClientToServerEvents` /
   `ServerToClientEvents`. Both server (`Server<…>`) and client (`Socket<…>`) are typed from these
@@ -137,9 +137,20 @@ Every mutation of persistent data follows this exact order:
 - Client → server events reply through an acknowledgement shaped as `SocketAck`
   (`{ ok: true, data }` or `{ ok: false, error: { code, message } }`) — the same error codes as REST.
 
-**Payloads.** Until domain DTOs exist, server events carry identifiers and act as invalidation
-signals. When DTOs land, events may carry the committed entity so clients can write it straight
-into the cache.
+**Payloads.** Server events carry the committed DTO (the same shape REST returns), so clients
+write it straight into the TanStack cache instead of refetching. Message events echo the sender's
+`clientMessageId` for optimistic-row matching.
+
+**Delivery audiences.** A message event is emitted once to the destination's _audience_: public
+channel → `channel:<id>` + `workspace:<wid>`; private channel → `channel:<id>` + each member's
+`user:<id>`; conversation → `conversation:<id>` + each participant's `user:<id>`. Private content
+never reaches the workspace room. Losing access removes the user's sockets from the room
+(`socketsLeave`) and sends `channel:removed`.
+
+**Ephemeral state.** Presence (per-user socket counts with an offline grace period, `lastSeenAt`
+persisted on going offline) and typing (6 s server TTL, accepted only from sockets in the room)
+are in-memory per API instance. The full chat event catalogue, pagination, read-state and
+reconnect rules are in [`CHAT.md`](CHAT.md).
 
 ## 7. Client state: TanStack Query vs. Zustand vs. URL
 
@@ -159,6 +170,12 @@ into the cache.
 - Query keys come only from the factory in `apps/web/src/lib/query-keys.ts`. Keys are hierarchical
   (`['workspaces', id, 'channels']`) so invalidating a workspace refreshes everything inside it.
 - Default query behaviour: `staleTime` 30s, no retries on 4xx, mutations never auto-retry.
+- Chat routes: `/app/workspaces/:workspaceId/channel/:channelId`,
+  `/app/workspaces/:workspaceId/dm/:conversationId`, plus `?thread=<messageId>` for the thread
+  panel. The workspace index redirects to the first active channel.
+- Chat UI state in Zustand (`stores/chat-store.ts`) is limited to typing users, composer drafts
+  and which destination is being read (to suppress unread bumps). Messages, lists, read cursors
+  and presence stay in the query cache.
 
 ## 8. Frontend API client
 

@@ -12,6 +12,7 @@ import { Router } from 'express'
 
 import { requireAuth } from '@/middleware/require-auth'
 import { validate } from '@/middleware/validate'
+import { chatWorkspaceRouter } from '@/modules/chat/chat.router'
 
 import { acceptInvite, createInvite, previewInvite } from './invites.service'
 import { getWorkspaceAccess, requireWorkspaceMember } from './workspace-access'
@@ -50,6 +51,9 @@ workspaceRouter.post('/invites', validate({ body: createInviteInputSchema }), as
   const body: WorkspaceInvite = await createInvite(getWorkspaceAccess(req), req.body)
   res.status(201).json(body)
 })
+
+// Channels, conversations, messages, members and search.
+workspaceRouter.use(chatWorkspaceRouter)
 
 workspacesRouter.use('/:workspaceId', workspaceRouter)
 

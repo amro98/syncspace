@@ -1,4 +1,11 @@
-import { canAccessChannel, canViewWorkspace, toActor, toChannelContext } from '@/lib/permissions'
+import {
+  canAccessChannel,
+  canAccessConversation,
+  canViewWorkspace,
+  toActor,
+  toChannelContext,
+  toConversationContext,
+} from '@/lib/permissions'
 import { getPrisma } from '@/lib/prisma'
 
 /**
@@ -10,12 +17,14 @@ import { getPrisma } from '@/lib/prisma'
 export interface RoomAccessPolicy {
   canJoinWorkspace(userId: string, workspaceId: string): Promise<boolean>
   canJoinChannel(userId: string, workspaceId: string, channelId: string): Promise<boolean>
+  canJoinConversation(userId: string, workspaceId: string, conversationId: string): Promise<boolean>
 }
 
 /** Denies everything. The default when no policy is supplied (secure by default). */
 export const denyAllRoomAccess: RoomAccessPolicy = {
   canJoinWorkspace: () => Promise.resolve(false),
   canJoinChannel: () => Promise.resolve(false),
+  canJoinConversation: () => Promise.resolve(false),
 }
 
 /** Production policy: workspace membership, and channel access per the channel rules. */
@@ -48,6 +57,29 @@ export const membershipRoomAccess: RoomAccessPolicy = {
     return canAccessChannel(
       toActor(userId, membership),
       toChannelContext(channel, channelMember !== null),
+    )
+  },
+
+  async canJoinConversation(userId, workspaceId, conversationId) {
+    const prisma = getPrisma()
+    const [membership, conversation, participant] = await Promise.all([
+      prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId } },
+        select: { role: true },
+      }),
+      prisma.conversation.findFirst({
+        where: { id: conversationId, workspaceId },
+        select: { type: true },
+      }),
+      prisma.conversationParticipant.findUnique({
+        where: { conversationId_userId: { conversationId, userId } },
+        select: { userId: true },
+      }),
+    ])
+    if (!conversation) return false
+    return canAccessConversation(
+      toActor(userId, membership),
+      toConversationContext(conversation, participant !== null),
     )
   },
 }
