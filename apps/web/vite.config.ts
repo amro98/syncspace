@@ -37,5 +37,7 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Route modules load lazily; the first render of a feature compiles it under jsdom.
+    testTimeout: 15_000,
   },
 })

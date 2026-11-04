@@ -199,7 +199,7 @@ export function MessageTimeline({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="min-h-0 flex-1 overflow-y-auto pb-2 [overflow-anchor:none]"
+        className="relative min-h-0 flex-1 overflow-y-auto pb-2 [overflow-anchor:none]"
         role="log"
         aria-label="Messages"
         aria-live="polite"

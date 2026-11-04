@@ -13,6 +13,7 @@ import { mailer } from '@/lib/mail/mailer'
 import { workspaceInviteEmail } from '@/lib/mail/templates'
 import { authorize, canInviteMember } from '@/lib/permissions'
 import { getPrisma } from '@/lib/prisma'
+import { notifyInviteAccepted } from '@/modules/notifications/triggers'
 import { isUniqueViolation } from '@/lib/prisma-errors'
 
 import type { WorkspaceAccess } from './workspace-access'
@@ -121,6 +122,7 @@ function findInviteByToken(token: string) {
       acceptedAt: true,
       revokedAt: true,
       workspace: { select: { id: true, name: true } },
+      createdById: true,
       createdBy: { select: { name: true } },
     },
   })
@@ -209,6 +211,7 @@ export async function acceptInvite(
       create: { workspaceId: invite.workspaceId, userId, role: invite.role },
     })
   })
+  await notifyInviteAccepted(invite, userId)
 
   return { workspaceId: invite.workspaceId }
 }

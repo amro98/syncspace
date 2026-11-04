@@ -13,7 +13,6 @@ import { InvitePage } from '@/features/invites/InvitePage'
 import { NotFoundPage } from './NotFoundPage'
 import { paths, routePatterns } from './paths'
 import { RouteErrorBoundary } from './RouteErrorBoundary'
-import { RoutePlaceholder } from './RoutePlaceholder'
 
 /**
  * Application route tree.
@@ -23,7 +22,7 @@ import { RoutePlaceholder } from './RoutePlaceholder'
  * - /app/*: requires a session; workspace routes additionally require membership.
  *
  * The workspace index opens its first channel; channels and DMs are addressed
- * by URL. The task board is a placeholder until its phase.
+ * by URL; so are boards (`/tasks/:boardId`, `?task=<id>` opens a task).
  *
  * The signed-in area (/app/*) is code-split: sign-in pages do not download the
  * workspace UI or the realtime client.
@@ -90,7 +89,14 @@ export const routes: RouteObject[] = [
                 path: routePatterns.dm,
                 lazy: async () => ({ Component: (await import('./app-area')).ConversationPage }),
               },
-              { path: routePatterns.tasks, element: <RoutePlaceholder title="Tasks" /> },
+              {
+                path: routePatterns.tasks,
+                lazy: async () => ({ Component: (await import('./app-area')).TasksIndexPage }),
+              },
+              {
+                path: routePatterns.board,
+                lazy: async () => ({ Component: (await import('./app-area')).BoardPage }),
+              },
               {
                 path: routePatterns.settings,
                 lazy: async () => ({

@@ -59,7 +59,7 @@ afterEach(() => {
   // Zustand stores are module singletons; reset them so tests stay independent.
   useThemeStore.setState({ theme: 'system' })
   useUiStore.setState({ mobileNavOpen: false })
-  useWorkspacePrefsStore.setState({ lastWorkspaceId: null })
+  useWorkspacePrefsStore.setState({ lastWorkspaceId: null, lastBoardIds: {} })
   useRealtimeStore.setState({ connection: 'idle', joinedWorkspaceId: null })
   useChatStore.setState({ typing: {}, drafts: {}, readingKey: null })
   resetFakeSocket()

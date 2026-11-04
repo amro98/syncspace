@@ -1,11 +1,13 @@
-import { Hash, MessageSquare } from 'lucide-react'
+import { Hash, KanbanSquare, MessageSquare } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { Spinner } from '@/components/shared/Spinner'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { paths } from '@/app/router/paths'
 import { errorMessage } from '@/features/auth/messages'
+import { useSearchTasks } from '@/features/tasks/hooks'
 import { formatRelative } from '@/lib/format'
 
 import { searchResultPath } from '../display'
@@ -114,7 +116,62 @@ export function SearchDialog({
             </ul>
           )}
         </div>
+        {!tooShort && (
+          <TaskResults
+            workspaceId={workspaceId}
+            query={debounced}
+            onPick={(path) => {
+              close(false)
+              void navigate(path)
+            }}
+          />
+        )}
       </div>
     </Dialog>
+  )
+}
+
+/** Matching tasks (title or description), opened in their board's task panel. */
+function TaskResults({
+  workspaceId,
+  query,
+  onPick,
+}: {
+  workspaceId: string
+  query: string
+  onPick: (path: string) => void
+}) {
+  const tasks = useSearchTasks(workspaceId, query)
+  if (!tasks.data || tasks.data.length === 0) return null
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Tasks</h3>
+      <ul
+        className="flex max-h-[30dvh] flex-col divide-y overflow-y-auto rounded-md border"
+        aria-label="Task results"
+      >
+        {tasks.data.map((task) => (
+          <li key={task.taskId}>
+            <button
+              type="button"
+              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+              onClick={() => {
+                onPick(paths.board(workspaceId, task.boardId, { task: task.taskId }))
+              }}
+            >
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <KanbanSquare className="size-3" aria-hidden />
+                {task.boardName}
+                {task.completedAt && ' · completed'}
+              </span>
+              <span className="text-sm font-medium">{task.title}</span>
+              {task.snippet && (
+                <span className="text-xs text-muted-foreground">{task.snippet}</span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

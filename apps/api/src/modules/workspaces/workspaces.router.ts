@@ -13,6 +13,7 @@ import { Router } from 'express'
 import { requireAuth } from '@/middleware/require-auth'
 import { validate } from '@/middleware/validate'
 import { chatWorkspaceRouter } from '@/modules/chat/chat.router'
+import { tasksWorkspaceRouter } from '@/modules/tasks/tasks.router'
 
 import { acceptInvite, createInvite, previewInvite } from './invites.service'
 import { getWorkspaceAccess, requireWorkspaceMember } from './workspace-access'
@@ -54,6 +55,7 @@ workspaceRouter.post('/invites', validate({ body: createInviteInputSchema }), as
 
 // Channels, conversations, messages, members and search.
 workspaceRouter.use(chatWorkspaceRouter)
+workspaceRouter.use(tasksWorkspaceRouter)
 
 workspacesRouter.use('/:workspaceId', workspaceRouter)
 

@@ -81,8 +81,16 @@ export const queryKeys = {
 
   boards: {
     list: (workspaceId: string) => [...queryKeys.workspaces.detail(workspaceId), 'boards'] as const,
+    /** Board + ordered columns + active tasks (one request renders the board). */
     detail: (workspaceId: string, boardId: string) =>
       [...queryKeys.boards.list(workspaceId), boardId] as const,
+    archivedTasks: (workspaceId: string, boardId: string) =>
+      [...queryKeys.boards.detail(workspaceId, boardId), 'archived-tasks'] as const,
+  },
+
+  taskLabels: {
+    list: (workspaceId: string) =>
+      [...queryKeys.workspaces.detail(workspaceId), 'task-labels'] as const,
   },
 
   tasks: {
@@ -94,6 +102,7 @@ export const queryKeys = {
 
   notifications: {
     all: () => ['notifications'] as const,
+    /** Inbox pages per filter (`{ filter: 'all' | 'unread' }`). */
     list: (filters: QueryFilters = NO_FILTERS) =>
       [...queryKeys.notifications.all(), 'list', filters] as const,
     unreadCount: () => [...queryKeys.notifications.all(), 'unread-count'] as const,

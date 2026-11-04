@@ -8,6 +8,8 @@ import { buttonVariants } from '@/components/ui/button'
 import { errorMessage } from '@/features/auth/messages'
 import { useWorkspaceMembers } from '@/features/chat/hooks'
 import { useChatRealtime } from '@/features/chat/realtime'
+import { useNotificationsRealtime } from '@/features/notifications/realtime'
+import { useTasksRealtime } from '@/features/tasks/realtime'
 import { useWorkspaceRoom } from '@/features/realtime/hooks'
 import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
 
@@ -43,6 +45,8 @@ export function WorkspaceLayout() {
 
   useWorkspaceRoom(workspaceId)
   useChatRealtime(workspaceId)
+  useTasksRealtime(workspaceId)
+  useNotificationsRealtime()
   // The directory feeds presence dots, typing names and pickers across the workspace.
   useWorkspaceMembers(workspaceId)
 

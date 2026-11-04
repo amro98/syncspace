@@ -9,7 +9,13 @@ import type {
   conversationRoomPayloadSchema,
   messageCreatedPayloadSchema,
   messageEventPayloadSchema,
-  notificationCreatedPayloadSchema,
+  boardEventPayloadSchema,
+  columnsUpdatedPayloadSchema,
+  labelsUpdatedPayloadSchema,
+  notificationEventPayloadSchema,
+  notificationsReadPayloadSchema,
+  taskEventPayloadSchema,
+  taskMovedPayloadSchema,
   presenceUpdatedPayloadSchema,
   reactionUpdatedPayloadSchema,
   readUpdatedPayloadSchema,
@@ -35,7 +41,9 @@ export const CLIENT_EVENTS = {
  * Events emitted by the server. Naming: `<entity>:<past-tense>`. Archiving and
  * gaining access to a private channel are `channel:updated` / `channel:created`
  * (the payload's `archivedAt` tells them apart); thread replies are
- * `message:created` with `parentMessageId` set and `parent` filled.
+ * `message:created` with `parentMessageId` set and `parent` filled. Likewise
+ * archiving/restoring a board or task is `board:updated` / `task:updated`
+ * (`archivedAt` set or cleared).
  */
 export const SERVER_EVENTS = {
   WORKSPACE_UPDATED: 'workspace:updated',
@@ -51,7 +59,16 @@ export const SERVER_EVENTS = {
   CONVERSATION_CREATED: 'conversation:created',
   CONVERSATION_UPDATED: 'conversation:updated',
   READ_UPDATED: 'read:updated',
+  BOARD_CREATED: 'board:created',
+  BOARD_UPDATED: 'board:updated',
+  COLUMNS_UPDATED: 'board:columns-updated',
+  TASK_CREATED: 'task:created',
+  TASK_UPDATED: 'task:updated',
+  TASK_MOVED: 'task:moved',
+  LABELS_UPDATED: 'labels:updated',
   NOTIFICATION_CREATED: 'notification:created',
+  NOTIFICATION_UPDATED: 'notification:updated',
+  NOTIFICATIONS_READ: 'notifications:read',
 } as const
 
 export type ClientEventName = (typeof CLIENT_EVENTS)[keyof typeof CLIENT_EVENTS]
@@ -71,7 +88,13 @@ export type TypingUpdatedPayload = z.infer<typeof typingUpdatedPayloadSchema>
 export type PresenceUpdatedPayload = z.infer<typeof presenceUpdatedPayloadSchema>
 export type ConversationEventPayload = z.infer<typeof conversationEventPayloadSchema>
 export type ReadUpdatedPayload = z.infer<typeof readUpdatedPayloadSchema>
-export type NotificationCreatedPayload = z.infer<typeof notificationCreatedPayloadSchema>
+export type BoardEventPayload = z.infer<typeof boardEventPayloadSchema>
+export type ColumnsUpdatedPayload = z.infer<typeof columnsUpdatedPayloadSchema>
+export type TaskEventPayload = z.infer<typeof taskEventPayloadSchema>
+export type TaskMovedPayload = z.infer<typeof taskMovedPayloadSchema>
+export type LabelsUpdatedPayload = z.infer<typeof labelsUpdatedPayloadSchema>
+export type NotificationEventPayload = z.infer<typeof notificationEventPayloadSchema>
+export type NotificationsReadPayload = z.infer<typeof notificationsReadPayloadSchema>
 
 /**
  * Acknowledgement returned for every client -> server event that expects one.
@@ -114,7 +137,16 @@ export interface ServerToClientEvents {
   [SERVER_EVENTS.CONVERSATION_CREATED]: (payload: ConversationEventPayload) => void
   [SERVER_EVENTS.CONVERSATION_UPDATED]: (payload: ConversationEventPayload) => void
   [SERVER_EVENTS.READ_UPDATED]: (payload: ReadUpdatedPayload) => void
-  [SERVER_EVENTS.NOTIFICATION_CREATED]: (payload: NotificationCreatedPayload) => void
+  [SERVER_EVENTS.BOARD_CREATED]: (payload: BoardEventPayload) => void
+  [SERVER_EVENTS.BOARD_UPDATED]: (payload: BoardEventPayload) => void
+  [SERVER_EVENTS.COLUMNS_UPDATED]: (payload: ColumnsUpdatedPayload) => void
+  [SERVER_EVENTS.TASK_CREATED]: (payload: TaskEventPayload) => void
+  [SERVER_EVENTS.TASK_UPDATED]: (payload: TaskEventPayload) => void
+  [SERVER_EVENTS.TASK_MOVED]: (payload: TaskMovedPayload) => void
+  [SERVER_EVENTS.LABELS_UPDATED]: (payload: LabelsUpdatedPayload) => void
+  [SERVER_EVENTS.NOTIFICATION_CREATED]: (payload: NotificationEventPayload) => void
+  [SERVER_EVENTS.NOTIFICATION_UPDATED]: (payload: NotificationEventPayload) => void
+  [SERVER_EVENTS.NOTIFICATIONS_READ]: (payload: NotificationsReadPayload) => void
 }
 
 /** Events exchanged between server instances (e.g. via a Redis adapter). None yet. */

@@ -133,12 +133,11 @@ describe('membership room policy', () => {
     await expect(update).resolves.toEqual({ workspaceId: workspace.id })
 
     const notification = new Promise((resolve) => {
-      client.once(SERVER_EVENTS.NOTIFICATION_CREATED, resolve)
+      client.once(SERVER_EVENTS.NOTIFICATIONS_READ, resolve)
     })
-    realtime.emit(rooms.user(member.id), SERVER_EVENTS.NOTIFICATION_CREATED, {
-      notificationId: workspace.id,
-    })
-    await expect(notification).resolves.toEqual({ notificationId: workspace.id })
+    const readPayload = { readAt: new Date().toISOString(), unreadCount: 0 }
+    realtime.emit(rooms.user(member.id), SERVER_EVENTS.NOTIFICATIONS_READ, readPayload)
+    await expect(notification).resolves.toEqual(readPayload)
   })
 
   it('refuses workspace rooms to non-members', async () => {

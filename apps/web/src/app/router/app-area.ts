@@ -11,3 +11,5 @@ export { WorkspaceSettingsPage } from '@/features/workspaces/routes/WorkspaceSet
 export { ChannelPage } from '@/features/chat/routes/ChannelPage'
 export { ConversationPage } from '@/features/chat/routes/ConversationPage'
 export { WorkspaceIndexRedirect } from '@/features/chat/routes/WorkspaceIndexRedirect'
+export { BoardPage } from '@/features/tasks/routes/BoardPage'
+export { TasksIndexPage } from '@/features/tasks/routes/TasksIndexPage'

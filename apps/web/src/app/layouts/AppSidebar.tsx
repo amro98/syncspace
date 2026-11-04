@@ -4,6 +4,7 @@ import { NavLink } from 'react-router'
 
 import { paths } from '@/app/router/paths'
 import { ChatSidebar } from '@/features/chat/components/ChatSidebar'
+import { BoardsSidebar } from '@/features/tasks/components/BoardsSidebar'
 import { WorkspaceSwitcher } from '@/features/workspaces/components/WorkspaceSwitcher'
 import { useCurrentWorkspaceId, useWorkspaceActor } from '@/features/workspaces/hooks'
 import { cn } from '@/lib/utils'
@@ -37,8 +38,8 @@ function SidebarLink({
 }
 
 /**
- * Workspace navigation: switcher, workspace pages, channels and direct
- * messages. Rendered inline on desktop and inside the mobile drawer.
+ * Workspace navigation: switcher, workspace pages, channels, direct
+ * messages and task boards. Rendered inline on desktop and inside the mobile drawer.
  */
 export function AppSidebar() {
   const workspaceId = useCurrentWorkspaceId()
@@ -59,6 +60,7 @@ export function AppSidebar() {
           </SidebarLink>
         </div>
         {actor && <ChatSidebar workspaceId={workspaceId} actor={actor} />}
+        {actor && <BoardsSidebar workspaceId={workspaceId} actor={actor} />}
       </nav>
     </div>
   )

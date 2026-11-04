@@ -19,6 +19,7 @@ import { badRequest } from '@/lib/errors'
 import { authorize, toMessageContext } from '@/lib/permissions'
 import { getPrisma } from '@/lib/prisma'
 import { isRecordNotFound, isUniqueViolation } from '@/lib/prisma-errors'
+import { notifyConversationMessage } from '@/modules/notifications/triggers'
 import { realtime } from '@/sockets/realtime'
 
 import { destinationAudience, type DestinationAccess, loadMessage } from './destinations'
@@ -150,6 +151,17 @@ async function createMessage(
     clientMessageId: input.clientMessageId ?? null,
     parent: parentSummary,
   })
+  if (access.kind === 'conversation') {
+    await notifyConversationMessage(
+      {
+        id: access.conversation.id,
+        type: access.conversation.type,
+        name: access.conversation.name,
+        participantIds: access.conversation.participants.map((p) => p.user.id),
+      },
+      message,
+    )
+  }
   return message
 }
 

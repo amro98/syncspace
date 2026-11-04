@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/shared/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import { UserMenu } from '@/features/auth/components/UserMenu'
 import { SearchDialog } from '@/features/chat/components/SearchDialog'
+import { NotificationBell } from '@/features/notifications/components/NotificationBell'
 import { ConnectionStatus } from '@/features/realtime/ConnectionStatus'
 import { useCurrentWorkspaceId } from '@/features/workspaces/hooks'
 import { useUiStore } from '@/stores/ui-store'
@@ -57,7 +58,7 @@ export function Topbar() {
           className="flex h-8 items-center gap-2 rounded-md border bg-muted/50 px-2 text-sm whitespace-nowrap text-muted-foreground hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:w-full sm:max-w-md sm:px-3"
         >
           <Search className="size-4" aria-hidden />
-          <span className="hidden flex-1 text-left sm:inline">Search messages</span>
+          <span className="hidden flex-1 text-left sm:inline">Search messages and tasks</span>
           <kbd className="hidden rounded border bg-background px-1.5 font-sans text-[10px] sm:inline">
             Ctrl K
           </kbd>
@@ -65,6 +66,7 @@ export function Topbar() {
       </div>
 
       <ConnectionStatus workspaceId={workspaceId} />
+      <NotificationBell />
       <ThemeToggle />
       <UserMenu />
       <SearchDialog workspaceId={workspaceId} open={searching} onOpenChange={setSearching} />

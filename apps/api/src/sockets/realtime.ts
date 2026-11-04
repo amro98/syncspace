@@ -42,4 +42,14 @@ export const realtime = {
   leaveRoom(from: RoomName, room: RoomName): void {
     io?.in(from).socketsLeave(room)
   },
+
+  /**
+   * Users with at least one socket in `room` right now (e.g. who has a
+   * conversation open). Empty when no socket server is attached.
+   */
+  async usersInRoom(room: RoomName): Promise<Set<string>> {
+    if (!io) return new Set()
+    const sockets = await io.in(room).fetchSockets()
+    return new Set(sockets.map((socket) => socket.data.userId))
+  },
 }

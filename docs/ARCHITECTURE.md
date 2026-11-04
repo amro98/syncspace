@@ -150,7 +150,9 @@ never reaches the workspace room. Losing access removes the user's sockets from 
 **Ephemeral state.** Presence (per-user socket counts with an offline grace period, `lastSeenAt`
 persisted on going offline) and typing (6 s server TTL, accepted only from sockets in the room)
 are in-memory per API instance. The full chat event catalogue, pagination, read-state and
-reconnect rules are in [`CHAT.md`](CHAT.md).
+reconnect rules are in [`CHAT.md`](CHAT.md). Board and task events (`board:*`, `task:*`,
+`labels:updated`) go to the workspace room; notifications go to `user:<id>`. See
+[`TASKS.md`](TASKS.md).
 
 ## 7. Client state: TanStack Query vs. Zustand vs. URL
 
@@ -172,7 +174,8 @@ reconnect rules are in [`CHAT.md`](CHAT.md).
 - Default query behaviour: `staleTime` 30s, no retries on 4xx, mutations never auto-retry.
 - Chat routes: `/app/workspaces/:workspaceId/channel/:channelId`,
   `/app/workspaces/:workspaceId/dm/:conversationId`, plus `?thread=<messageId>` for the thread
-  panel. The workspace index redirects to the first active channel.
+  panel. The workspace index redirects to the first active channel. Boards:
+  `/app/workspaces/:workspaceId/tasks/:boardId` with `?task=<id>` and board filters in the query.
 - Chat UI state in Zustand (`stores/chat-store.ts`) is limited to typing users, composer drafts
   and which destination is being read (to suppress unread bumps). Messages, lists, read cursors
   and presence stay in the query cache.

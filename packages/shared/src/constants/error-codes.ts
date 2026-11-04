@@ -43,6 +43,10 @@ export const ERROR_CODES = {
   INVITE_INVALID: 'INVITE_INVALID',
   INVITE_EXPIRED: 'INVITE_EXPIRED',
   INVITE_EMAIL_MISMATCH: 'INVITE_EMAIL_MISMATCH',
+
+  // Boards
+  /** A column that still holds active tasks cannot be deleted: move them first. */
+  COLUMN_NOT_EMPTY: 'COLUMN_NOT_EMPTY',
 } as const
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
@@ -79,4 +83,6 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   INVITE_INVALID: 404,
   INVITE_EXPIRED: 410,
   INVITE_EMAIL_MISMATCH: 403,
+
+  COLUMN_NOT_EMPTY: 409,
 }

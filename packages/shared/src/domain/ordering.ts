@@ -47,3 +47,49 @@ export function evenlySpacedPositions(count: number): number[] {
   if (!Number.isInteger(count) || count < 0) throw new RangeError('count must be a whole number')
   return Array.from({ length: count }, (_, index) => (index + 1) * POSITION_GAP)
 }
+
+export interface Positioned {
+  id: string
+  position: number
+}
+
+/** Sort comparator for positioned items: position, ties broken by id. */
+export function byPosition(a: Positioned, b: Positioned): number {
+  return a.position - b.position || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+}
+
+/**
+ * Plans placing `itemId` just after `afterId` (null = first) in a list of
+ * `siblings` (sorted, NOT containing the item). Returns the item's new
+ * position and every row that must be written: normally just the item; after
+ * precision runs out (or on a position tie) the whole list, evenly re-spaced.
+ *
+ * Used by the API for moves and by the client for the optimistic preview, so
+ * both agree on the result.
+ */
+export function planInsert(
+  siblings: readonly Positioned[],
+  itemId: string,
+  afterId: string | null,
+): { position: number; updates: Positioned[] } {
+  const index = afterId === null ? 0 : siblings.findIndex((sibling) => sibling.id === afterId) + 1
+  if (index === 0 && afterId !== null) throw new RangeError('afterId is not in the list')
+
+  const before = siblings[index - 1]?.position ?? null
+  const after = siblings[index]?.position ?? null
+  const tied = before !== null && after !== null && before >= after
+  const result = tied
+    ? ({ ok: false, reason: 'rebalance' } as const)
+    : positionBetween(before, after)
+  if (result.ok)
+    return { position: result.position, updates: [{ id: itemId, position: result.position }] }
+
+  const ordered = [
+    ...siblings.slice(0, index).map((s) => s.id),
+    itemId,
+    ...siblings.slice(index).map((s) => s.id),
+  ]
+  const positions = evenlySpacedPositions(ordered.length)
+  const updates = ordered.map((id, i) => ({ id, position: positions[i] ?? 0 }))
+  return { position: positions[index] ?? 0, updates }
+}

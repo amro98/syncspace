@@ -3,16 +3,17 @@
 SyncSpace is a real-time team workspace: Slack-style channels and direct messages combined with
 Trello-style task boards, in one app.
 
-> **Status:** foundation, data model, authentication + workspace onboarding and **channels +
-> real-time chat** are done: public/private channels, DMs and groups, threads, reactions,
-> edit/delete with moderation, unread counts, typing indicators, presence and message search.
-> Task boards come next (see the roadmap).
+> **Status:** foundation, data model, authentication + workspace onboarding, channels +
+> real-time chat, and **Kanban boards, tasks and notifications** are done: drag-and-drop boards
+> with assignees, labels, priorities, due dates and URL-shareable filters, plus a realtime
+> notification inbox. Member management and deployment come next (see the roadmap).
 
 - Architecture decisions: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Data model, invariants and delete rules: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
 - Authentication, sessions, OAuth setup, invites: [`docs/AUTH.md`](docs/AUTH.md)
 - Authorization rules: [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md)
 - Chat, realtime events, read state, presence and typing: [`docs/CHAT.md`](docs/CHAT.md)
+- Boards, tasks, drag and drop, notifications: [`docs/TASKS.md`](docs/TASKS.md)
 - Feature folder conventions: [`apps/web/src/features/README.md`](apps/web/src/features/README.md)
 
 ## Tech stack
@@ -209,6 +210,6 @@ The full reasoning is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 | 5     | ✅ **Real-time messaging** — optimistic send, edit/delete, pagination, threads, reactions, unread |
 | 6     | ✅ **Presence and typing indicators** (+ workspace message search)                                |
 | 7     | Attachments — file/image upload and previews                                                      |
-| 8     | Kanban boards and tasks — columns, drag and drop, assignees, priorities, due dates                |
-| 9     | Notifications (search basics shipped with chat; full-text ranking later)                          |
+| 8     | ✅ **Kanban boards and tasks** — columns, drag and drop, assignees, labels, priorities, due dates |
+| 9     | ✅ **Notifications and search** — realtime inbox, task search (mentions and reminders later)      |
 | 10    | Polish and deployment — responsive pass, accessibility, Vercel + Render + PostgreSQL              |

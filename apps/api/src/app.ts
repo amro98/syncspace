@@ -11,6 +11,8 @@ import { requestLogger } from '@/middleware/request-logger'
 import { verifyOrigin } from '@/middleware/verify-origin'
 import { createAuthRouter } from '@/modules/auth/auth.router'
 import { messagesRouter } from '@/modules/chat/chat.router'
+import { notificationsRouter } from '@/modules/notifications/notifications.router'
+import { boardsRouter, labelsRouter, tasksRouter } from '@/modules/tasks/tasks.router'
 import { devMailRouter } from '@/modules/dev/dev-mail.router'
 import { healthRouter } from '@/modules/health/health.router'
 import { invitesRouter, workspacesRouter } from '@/modules/workspaces/workspaces.router'
@@ -45,6 +47,10 @@ export function createApp({
   app.use('/workspaces', workspacesRouter)
   app.use('/invites', invitesRouter)
   app.use('/messages', messagesRouter)
+  app.use('/boards', boardsRouter)
+  app.use('/tasks', tasksRouter)
+  app.use('/task-labels', labelsRouter)
+  app.use('/notifications', notificationsRouter)
 
   // Captured-mail viewer; exists only in development (never in test or production).
   if (env.NODE_ENV === 'development') app.use('/dev/mail', devMailRouter)

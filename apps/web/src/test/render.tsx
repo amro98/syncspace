@@ -150,7 +150,7 @@ export function workspaceDetail(
 
 /**
  * Routes for a signed-in user who belongs to `workspaces`. Each workspace has
- * empty chat lists unless the caller overrides those routes.
+ * empty chat, board and notification lists unless the caller overrides them.
  */
 export function signedInRoutes(
   options: { user?: AuthUser; workspaces?: WorkspaceDetail[] } = {},
@@ -173,12 +173,16 @@ export function signedInRoutes(
       },
     },
     'POST /auth/logout': { status: 204 },
+    'GET /notifications/unread-count': { body: { unreadCount: 0 } },
+    'GET /notifications': { body: { items: [], nextCursor: null, unreadCount: 0 } },
   }
   for (const workspace of workspaces) {
     routes[`GET /workspaces/${workspace.id}`] = { body: workspace }
     routes[`GET /workspaces/${workspace.id}/channels`] = { body: { items: [] } }
     routes[`GET /workspaces/${workspace.id}/conversations`] = { body: { items: [] } }
     routes[`GET /workspaces/${workspace.id}/members`] = { body: { items: [] } }
+    routes[`GET /workspaces/${workspace.id}/boards`] = { body: { items: [] } }
+    routes[`GET /workspaces/${workspace.id}/task-labels`] = { body: { items: [] } }
   }
   return routes
 }

@@ -1,8 +1,8 @@
 # Features
 
 One folder per product domain, created in the phase that implements it. Present: `auth`,
-`workspaces`, `invites`, `realtime`. Planned: `members`, `channels`, `messages`,
-`conversations`, `presence`, `boards`, `tasks`, `notifications`, `search`.
+`workspaces`, `invites`, `realtime`, `chat` (channels, DMs, messages, presence, search),
+`tasks` (boards, columns, tasks, labels) and `notifications`. Planned: `members`.
 
 ```
 features/<feature>/

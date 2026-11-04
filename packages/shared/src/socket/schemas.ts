@@ -10,6 +10,14 @@ import {
   reactionSummarySchema,
 } from '../schemas/chat'
 import { idSchema, isoDateTimeSchema } from '../schemas/common'
+import { notificationSchema } from '../schemas/notifications'
+import {
+  boardSchema,
+  columnSchema,
+  taskLabelSchema,
+  taskPlacementSchema,
+  taskSchema,
+} from '../schemas/tasks'
 
 // ---------------------------------------------------------------------------
 // Client -> server payloads. The server validates every inbound payload with
@@ -98,6 +106,40 @@ export const readUpdatedPayloadSchema = z.object({
   cursor: readCursorSchema,
 })
 
-export const notificationCreatedPayloadSchema = z.object({
-  notificationId: idSchema,
+// Boards & tasks (workspace room) ------------------------------------------------
+
+export const boardEventPayloadSchema = z.object({ board: boardSchema })
+
+/** The board's full, ordered column list (small; replaces the client's copy). */
+export const columnsUpdatedPayloadSchema = z.object({
+  workspaceId: idSchema,
+  boardId: idSchema,
+  columns: z.array(columnSchema),
+})
+
+export const taskEventPayloadSchema = z.object({ task: taskSchema })
+
+/** Compact move: new placements only (one task, or a whole column after a rebalance). */
+export const taskMovedPayloadSchema = z.object({
+  workspaceId: idSchema,
+  boardId: idSchema,
+  placements: z.array(taskPlacementSchema),
+})
+
+/** The workspace's full label list (labels are few). Deleted labels vanish from tasks. */
+export const labelsUpdatedPayloadSchema = z.object({
+  workspaceId: idSchema,
+  labels: z.array(taskLabelSchema),
+})
+
+// Notifications (user room) ---------------------------------------------------------
+
+export const notificationEventPayloadSchema = z.object({
+  notification: notificationSchema,
+  unreadCount: z.number().int().min(0),
+})
+
+export const notificationsReadPayloadSchema = z.object({
+  readAt: isoDateTimeSchema,
+  unreadCount: z.number().int().min(0),
 })
