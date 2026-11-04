@@ -20,6 +20,8 @@ import type { InfiniteData } from '@tanstack/react-query'
 export interface TimelineMessage extends Message {
   clientMessageId?: string
   status?: 'sending' | 'failed'
+  /** Files of an optimistic row (name/size/type only; the File objects stay in the outbox). */
+  pendingFiles?: { name: string; size: number; type: string }[]
 }
 
 export type TimelinePage = MessagePage & { items: TimelineMessage[] }

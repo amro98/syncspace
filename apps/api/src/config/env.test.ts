@@ -38,8 +38,17 @@ describe('parseEnv', () => {
       CORS_ORIGIN: 'https://app.example.com',
       FRONTEND_URL: 'https://app.example.com/',
       API_PUBLIC_URL: 'https://api.example.com',
+      STORAGE_DRIVER: 's3',
+      S3_BUCKET: 'syncspace-uploads',
+      S3_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
+      S3_ACCESS_KEY_ID: 'key-id',
+      S3_SECRET_ACCESS_KEY: 'key-secret',
     })
     expect(env.isProduction).toBe(true)
+    expect(env.storage).toMatchObject({
+      driver: 's3',
+      s3: { bucket: 'syncspace-uploads', region: 'auto' },
+    })
     expect(env.usingDevJwtSecret).toBe(false)
     expect(env.FRONTEND_URL).toBe('https://app.example.com')
   })
@@ -58,6 +67,22 @@ describe('parseEnv', () => {
     const env = parseEnv({})
     expect(env.FRONTEND_URL).toBe('http://localhost:5173')
     expect(env.API_PUBLIC_URL).toBe('http://localhost:4000')
+  })
+
+  it('refuses local disk storage in production and incomplete S3 settings anywhere', () => {
+    const production = {
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://user:pass@db.example.com:5432/syncspace',
+      JWT_SECRET: 'x'.repeat(48),
+      FRONTEND_URL: 'https://app.example.com',
+      API_PUBLIC_URL: 'https://api.example.com',
+    }
+    expect(() => parseEnv(production)).toThrow(/STORAGE_DRIVER/)
+    expect(parseEnv({ ...production, STORAGE_DRIVER: 'disabled' }).storage.driver).toBe('disabled')
+    expect(() => parseEnv({ STORAGE_DRIVER: 's3', S3_BUCKET: 'b' })).toThrow(
+      /S3_ACCESS_KEY_ID[\s\S]*S3_SECRET_ACCESS_KEY/,
+    )
+    expect(parseEnv({}).storage).toMatchObject({ driver: 'local', localDir: '.uploads' })
   })
 
   it('rejects SameSite=None outside production', () => {

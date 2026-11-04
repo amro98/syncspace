@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { isApiError } from '@/lib/api-client'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { register as registerAccount } from '../api'
 import { AuthCard, FieldError, OrDivider } from '../components/AuthCard'
@@ -24,6 +25,7 @@ import { errorMessage } from '../messages'
 type RegisterFormValues = z.input<typeof registerInputSchema>
 
 export function RegisterPage() {
+  useDocumentTitle('Create your account')
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const replaceSession = useReplaceSession()

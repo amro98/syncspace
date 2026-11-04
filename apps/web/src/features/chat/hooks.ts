@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useSession } from '@/features/auth/hooks'
 import type { ApiError } from '@/lib/api-client'
 import { queryKeys } from '@/lib/query-keys'
-import { useChatStore } from '@/stores/chat-store'
+import { chatOutbox as outbox, useChatStore } from '@/stores/chat-store'
 
 import * as api from './api'
 import {
@@ -31,6 +31,8 @@ import {
   upsertChannel,
   upsertConversation,
 } from './cache'
+
+export { chatOutbox as outbox } from '@/stores/chat-store'
 
 // ---------------------------------------------------------------------------
 // Queries
@@ -103,6 +105,11 @@ export function useThread(parentMessageId: string) {
  * 3. the REST response or the socket echo — whichever comes first — replaces
  *    the row (matched by clientMessageId); the other is deduplicated by id;
  * 4. on failure the row turns `failed` (retry / discard) and the text stays.
+ *
+ * With files, the request carries them (multipart): the server stores them and
+ * creates the message in one go, so the row only turns "sent" once every file
+ * is safely stored. The File objects wait in the in-memory outbox until then,
+ * so a failed send can be retried without picking the files again.
  */
 export function useSendMessage(workspaceId: string, destination: Destination) {
   const queryClient = useQueryClient()
@@ -110,9 +117,16 @@ export function useSendMessage(workspaceId: string, destination: Destination) {
   const key = queryKeys.messages.destination(destination)
 
   return useMutation({
-    mutationFn: (input: { content: string; clientMessageId: string }) =>
-      api.sendMessage(workspaceId, destination, input),
-    onMutate: ({ content, clientMessageId }) => {
+    mutationFn: ({
+      files = [],
+      ...input
+    }: {
+      content: string
+      clientMessageId: string
+      files?: File[]
+    }) => api.sendMessage(workspaceId, destination, input, files),
+    onMutate: ({ content, clientMessageId, files = [] }) => {
+      outbox.set(clientMessageId, { content, files })
       if (!user) return
       const optimistic: TimelineMessage = {
         id: `temp:${clientMessageId}`,
@@ -129,10 +143,12 @@ export function useSendMessage(workspaceId: string, destination: Destination) {
         reactions: [],
         replyCount: 0,
         attachments: [],
+        pendingFiles: files.map((file) => ({ name: file.name, size: file.size, type: file.type })),
       }
       queryClient.setQueryData<TimelineData>(key, (data) => insertOptimistic(data, optimistic))
     },
     onSuccess: (message, { clientMessageId }) => {
+      outbox.delete(clientMessageId)
       queryClient.setQueryData<TimelineData>(key, (data) =>
         insertMessage(data, message, clientMessageId),
       )
@@ -148,8 +164,14 @@ export function useSendMessage(workspaceId: string, destination: Destination) {
 export function useSendReply(parentMessageId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { content: string; clientMessageId: string }) =>
-      api.sendReply(parentMessageId, input),
+    mutationFn: ({
+      files = [],
+      ...input
+    }: {
+      content: string
+      clientMessageId: string
+      files?: File[]
+    }) => api.sendReply(parentMessageId, input, files),
     onSuccess: (reply) => {
       queryClient.setQueryData<ThreadResponse>(
         queryKeys.messages.thread(parentMessageId),
@@ -192,6 +214,17 @@ export function useEditMessage() {
     mutationFn: ({ messageId, content }: { messageId: string; content: string }) =>
       api.editMessage(messageId, content),
     onSuccess: apply,
+  })
+}
+
+/** Removes one file from the viewer's own message (the server re-broadcasts the message). */
+export function useRemoveMessageAttachment() {
+  const apply = useApplyMessage()
+  return useMutation({
+    mutationFn: api.removeAttachment,
+    onSuccess: ({ message }) => {
+      apply(message)
+    },
   })
 }
 

@@ -3,6 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { queryKeys } from '@/lib/query-keys'
+import { chatOutbox, useChatStore } from '@/stores/chat-store'
+import { useUiStore } from '@/stores/ui-store'
+import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
 
 import { fetchAuthProviders, fetchSession, logout } from './api'
 
@@ -37,6 +40,13 @@ export function useReplaceSession() {
       void queryClient.cancelQueries()
       queryClient.removeQueries({ predicate: (query) => query.queryHash !== sessionHash })
       queryClient.getMutationCache().clear()
+      // Client-side state of the previous identity goes too: drafts, typing,
+      // unsent files, remembered workspace/board, the expiry notice.
+      useChatStore.setState({ typing: {}, drafts: {}, readingKey: null })
+      useWorkspacePrefsStore.setState({ lastWorkspaceId: null, lastBoardIds: {} })
+      useUiStore.getState().setSessionExpired(false)
+      if (user) useUiStore.getState().setSignedOut(false)
+      chatOutbox.clear()
       queryClient.setQueryData(queryKeys.auth.session(), user)
     },
     [queryClient],
@@ -54,6 +64,7 @@ export function useLogout() {
       void import('@/lib/socket').then(({ disconnectSocket }) => {
         disconnectSocket()
       })
+      useUiStore.getState().setSignedOut(true)
       replaceSession(null)
     },
   })

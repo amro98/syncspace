@@ -1,5 +1,6 @@
 import type { WorkspaceActor } from '@syncspace/shared'
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { useParams } from 'react-router'
 
 import { useSession } from '@/features/auth/hooks'
@@ -38,6 +39,8 @@ export function useWorkspaceActor(): WorkspaceActor | null {
   const workspaceId = useCurrentWorkspaceId()
   const { data: user } = useSession()
   const { data: workspace } = useWorkspace(workspaceId)
-  if (!user || !workspace) return null
-  return { userId: user.id, role: workspace.membership.role }
+  const userId = user?.id
+  const role = workspace?.membership.role
+  // Stable identity: memoized rows (messages, cards) compare it by reference.
+  return useMemo(() => (userId && role ? { userId, role } : null), [userId, role])
 }

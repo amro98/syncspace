@@ -12,6 +12,7 @@ import { UserMenu } from '@/features/auth/components/UserMenu'
 import { useSession } from '@/features/auth/hooks'
 import { cn } from '@/lib/utils'
 import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { CreateWorkspaceForm } from '../components/CreateWorkspaceForm'
 import { InviteForm } from '../components/InviteForm'
@@ -58,6 +59,7 @@ function Steps({ current }: { current: Step }) {
  * Welcome -> Create workspace -> optionally invite teammates -> workspace.
  */
 export function OnboardingPage() {
+  useDocumentTitle('Welcome')
   const { data: user } = useSession()
   const workspaces = useWorkspaces()
   const [searchParams] = useSearchParams()

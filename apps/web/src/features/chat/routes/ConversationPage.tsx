@@ -9,6 +9,7 @@ import { Spinner } from '@/components/shared/Spinner'
 import { errorMessage } from '@/features/auth/messages'
 import { useCurrentWorkspaceId, useWorkspaceActor } from '@/features/workspaces/hooks'
 import { formatRelative } from '@/lib/format'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { ChatView } from '../components/ChatView'
 import { type NoticeState, RouteNotice } from '../components/RouteNotice'
@@ -26,6 +27,10 @@ export function ConversationPage() {
     () => ({ kind: 'conversation' as const, id: conversationId }),
     [conversationId],
   )
+  const conversation = conversations.data?.find((item) => item.id === conversationId)
+  useDocumentTitle(
+    conversation && actor ? conversationTitle(conversation, actor.userId) : 'Direct messages',
+  )
 
   if (conversations.isPending || !actor) {
     return (
@@ -42,7 +47,6 @@ export function ConversationPage() {
     )
   }
 
-  const conversation = conversations.data.find((item) => item.id === conversationId)
   if (!conversation) {
     const state: NoticeState = { notice: 'That conversation is not available.' }
     return <Navigate to={paths.workspace(workspaceId)} replace state={state} />

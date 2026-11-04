@@ -19,6 +19,9 @@ import {
   workspaceMemberListResponseSchema,
 } from '@syncspace/shared'
 
+import { z } from 'zod'
+
+import { toFormData } from '@/features/attachments/files'
 import { apiClient } from '@/lib/api-client'
 
 const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
@@ -130,13 +133,19 @@ export function fetchMessages(
   })
 }
 
+/** JSON for text only; multipart when files are attached (they upload with the message). */
+function messageBody(input: { content: string; clientMessageId: string }, files: File[]) {
+  return files.length > 0 ? toFormData(input, files) : input
+}
+
 export function sendMessage(
   workspaceId: string,
   destination: Destination,
   input: { content: string; clientMessageId: string },
+  files: File[] = [],
 ) {
   return apiClient.post(`${destinationPath(workspaceId, destination)}/messages`, {
-    body: input,
+    body: messageBody(input, files),
     schema: messageSchema,
   })
 }
@@ -163,8 +172,21 @@ export function fetchThread(messageId: string, signal?: AbortSignal) {
   })
 }
 
-export function sendReply(messageId: string, input: { content: string; clientMessageId: string }) {
-  return apiClient.post(`/messages/${messageId}/replies`, { body: input, schema: messageSchema })
+export function sendReply(
+  messageId: string,
+  input: { content: string; clientMessageId: string },
+  files: File[] = [],
+) {
+  return apiClient.post(`/messages/${messageId}/replies`, {
+    body: messageBody(input, files),
+    schema: messageSchema,
+  })
+}
+
+export function removeAttachment(attachmentId: string) {
+  return apiClient.delete(`/attachments/${attachmentId}`, {
+    schema: z.object({ message: messageSchema }),
+  })
 }
 
 export function toggleReaction(messageId: string, emoji: string) {

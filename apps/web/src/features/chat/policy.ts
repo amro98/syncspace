@@ -11,20 +11,39 @@ import { canPostMessage } from '@syncspace/shared'
  * Bridges API DTOs to the shared permission policy, so the UI shows exactly
  * the controls the API will allow (the API still enforces them).
  */
-export function channelPolicy(channel: ChannelSummary): MessageDestination {
-  return {
-    kind: 'channel',
-    channel: {
-      type: channel.type,
-      isArchived: channel.archivedAt !== null,
-      isMember: channel.isMember,
-    },
+// Policies are interned (one shared object per combination), so passing them to
+// memoized message rows never causes re-renders by identity alone.
+const policies = new Map<string, MessageDestination>()
+function intern(key: string, create: () => MessageDestination): MessageDestination {
+  let policy = policies.get(key)
+  if (!policy) {
+    policy = create()
+    policies.set(key, policy)
   }
+  return policy
+}
+
+export function channelPolicy(
+  channel: Pick<ChannelSummary, 'type' | 'archivedAt' | 'isMember'>,
+): MessageDestination {
+  const isArchived = channel.archivedAt !== null
+  return intern(
+    `channel:${channel.type}:${String(isArchived)}:${String(channel.isMember)}`,
+    () => ({
+      kind: 'channel',
+      channel: { type: channel.type, isArchived, isMember: channel.isMember },
+    }),
+  )
 }
 
 /** Conversations are only listed to participants. */
-export function conversationPolicy(conversation: ConversationSummary): MessageDestination {
-  return { kind: 'conversation', conversation: { type: conversation.type, isParticipant: true } }
+export function conversationPolicy(
+  conversation: Pick<ConversationSummary, 'type'>,
+): MessageDestination {
+  return intern(`conversation:${conversation.type}`, () => ({
+    kind: 'conversation',
+    conversation: { type: conversation.type, isParticipant: true },
+  }))
 }
 
 /** Why the composer is unavailable, or null when the actor may post. */

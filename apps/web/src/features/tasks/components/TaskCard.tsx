@@ -1,7 +1,7 @@
 import type { Task } from '@syncspace/shared'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Paperclip } from 'lucide-react'
 import { memo } from 'react'
 
 import { Avatar } from '@/components/shared/Avatar'
@@ -46,6 +46,16 @@ export function TaskCardBody({ task, overlay = false }: { task: Task; overlay?: 
       <div className="flex flex-wrap items-center gap-2">
         <PriorityBadge priority={task.priority} compact />
         <DueBadge task={task} />
+        {task.attachments.length > 0 && (
+          <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+            <Paperclip className="size-3.5" aria-hidden />
+            {task.attachments.length}
+            <span className="sr-only">
+              {' '}
+              {task.attachments.length === 1 ? 'attachment' : 'attachments'}
+            </span>
+          </span>
+        )}
         {task.assignees.length > 0 && (
           <span
             className="ml-auto flex -space-x-1.5"

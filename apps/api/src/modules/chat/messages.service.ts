@@ -15,10 +15,18 @@ import {
 } from '@syncspace/shared'
 import type { z } from 'zod'
 
-import { badRequest } from '@/lib/errors'
+import { AppError, badRequest } from '@/lib/errors'
 import { authorize, toMessageContext } from '@/lib/permissions'
 import { getPrisma } from '@/lib/prisma'
 import { isRecordNotFound, isUniqueViolation } from '@/lib/prisma-errors'
+import {
+  attachmentRows,
+  discardObjects,
+  requireStorage,
+  storeFiles,
+  withStoredFiles,
+} from '@/modules/attachments/attachments.service'
+import type { IncomingFile } from '@/modules/attachments/files'
 import { notifyConversationMessage } from '@/modules/notifications/triggers'
 import { realtime } from '@/sockets/realtime'
 
@@ -103,38 +111,72 @@ export async function listMessages(
 // Sending
 // ---------------------------------------------------------------------------
 
+interface SendInput {
+  content: string
+  clientMessageId?: string | undefined
+}
+
+/**
+ * Creates a message (text, files or both). Files are validated and stored
+ * BEFORE the transaction; the message and its attachment rows are then
+ * written together. If the transaction fails, the stored objects are removed
+ * (withStoredFiles), so no object outlives a failed send.
+ */
 async function createMessage(
   access: DestinationAccess,
-  input: { content: string; clientMessageId?: string | undefined },
+  input: SendInput,
   parent: MessageRow | null,
+  files: IncomingFile[],
 ): Promise<Message> {
   const prisma = getPrisma()
   const userId = access.workspace.actor.userId
+  if (!input.content && files.length === 0) {
+    const message = 'Write a message or attach a file.'
+    throw new AppError('VALIDATION_ERROR', message, { issues: [{ path: 'content', message }] })
+  }
+  const stored = await storeFiles(access.workspace.workspaceId, files)
 
-  const row = await prisma.$transaction(async (tx) => {
-    const created = await tx.message.create({
-      data: {
-        workspaceId: access.workspace.workspaceId,
-        authorId: userId,
-        ...access.messageWhere,
-        parentMessageId: parent?.id ?? null,
-        content: input.content,
-      },
-      select: messageSelect,
-    })
-    if (access.kind === 'conversation') {
-      // Sidebar ordering ("recent conversations").
-      await tx.conversation.update({
-        where: { id: access.conversation.id },
-        data: { updatedAt: created.createdAt },
+  const row = await withStoredFiles(stored, () =>
+    prisma.$transaction(async (tx) => {
+      const message = await tx.message.create({
+        data: {
+          workspaceId: access.workspace.workspaceId,
+          authorId: userId,
+          ...access.messageWhere,
+          parentMessageId: parent?.id ?? null,
+          content: input.content,
+        },
+        select: { id: true },
       })
-    }
-    if (!parent) {
-      // The author has obviously read their own message.
-      await advanceReadCursor(tx, access, userId, created)
-    }
-    return created
-  })
+      if (stored.length > 0) {
+        await tx.attachment.createMany({
+          data: attachmentRows(
+            stored,
+            { messageId: message.id },
+            access.workspace.workspaceId,
+            userId,
+            requireStorage().driver,
+          ),
+        })
+      }
+      const created = await tx.message.findUniqueOrThrow({
+        where: { id: message.id },
+        select: messageSelect,
+      })
+      if (access.kind === 'conversation') {
+        // Sidebar ordering ("recent conversations").
+        await tx.conversation.update({
+          where: { id: access.conversation.id },
+          data: { updatedAt: created.createdAt },
+        })
+      }
+      if (!parent) {
+        // The author has obviously read their own message.
+        await advanceReadCursor(tx, access, userId, created)
+      }
+      return created
+    }),
+  )
 
   const message = toMessageDto(row)
   const parentSummary = parent
@@ -165,12 +207,14 @@ async function createMessage(
   return message
 }
 
+/** Authorization happens before any file is stored. */
 export function sendMessage(
   access: DestinationAccess,
-  input: { content: string; clientMessageId?: string | undefined },
+  input: SendInput,
+  files: IncomingFile[] = [],
 ): Promise<Message> {
   authorize(canPostMessage(access.workspace.actor, access.policy), postingDenied(access))
-  return createMessage(access, input, null)
+  return createMessage(access, input, null, files)
 }
 
 // ---------------------------------------------------------------------------
@@ -212,13 +256,57 @@ export async function deleteMessage(userId: string, messageId: string) {
       : 'You can only delete your own messages.',
   )
 
-  const row = await getPrisma().message.update({
-    where: { id: message.id },
-    data: { deletedAt: new Date(), content: '' },
-    select: messageSelect,
+  return softDelete(access, message.id)
+}
+
+/** Redacts the message and removes its files (rows now, objects right after commit). */
+async function softDelete(access: DestinationAccess, messageId: string): Promise<Message> {
+  const { row, keys } = await getPrisma().$transaction(async (tx) => {
+    const files = await tx.attachment.findMany({
+      where: { messageId },
+      select: { storageKey: true },
+    })
+    await tx.attachment.deleteMany({ where: { messageId } })
+    const updated = await tx.message.update({
+      where: { id: messageId },
+      data: { deletedAt: new Date(), content: '' },
+      select: messageSelect,
+    })
+    return { row: updated, keys: files.map((file) => file.storageKey) }
   })
+  await discardObjects(keys)
   const dto = toMessageDto(row)
   realtime.emit(await destinationAudience(access), SERVER_EVENTS.MESSAGE_DELETED, { message: dto })
+  return dto
+}
+
+/**
+ * Removes one file from a message (its author only, like editing). A message
+ * left with neither text nor files is deleted.
+ */
+export async function removeMessageAttachment(
+  userId: string,
+  attachment: { id: string; messageId: string; storageKey: string | null },
+): Promise<Message> {
+  const { message, access } = await loadMessage(userId, attachment.messageId)
+  authorize(
+    canEditMessage(access.workspace.actor, messageContextFor(access, message)),
+    'You can only remove files from your own messages.',
+  )
+  if (!message.content && message.attachments.length <= 1) {
+    return softDelete(access, message.id)
+  }
+  const row = await getPrisma().$transaction(async (tx) => {
+    await tx.attachment.delete({ where: { id: attachment.id } })
+    return tx.message.update({
+      where: { id: message.id },
+      data: { editedAt: new Date() },
+      select: messageSelect,
+    })
+  })
+  await discardObjects([attachment.storageKey])
+  const dto = toMessageDto(row)
+  realtime.emit(await destinationAudience(access), SERVER_EVENTS.MESSAGE_UPDATED, { message: dto })
   return dto
 }
 
@@ -271,7 +359,8 @@ export async function listReplies(
 export async function replyToMessage(
   userId: string,
   messageId: string,
-  input: { content: string; clientMessageId?: string | undefined },
+  input: SendInput,
+  files: IncomingFile[] = [],
 ): Promise<Message> {
   const { message, access } = await loadMessage(userId, messageId)
   authorize(
@@ -282,7 +371,7 @@ export async function replyToMessage(
         ? 'You cannot reply to a deleted message.'
         : postingDenied(access),
   )
-  return createMessage(access, input, message)
+  return createMessage(access, input, message, files)
 }
 
 // ---------------------------------------------------------------------------

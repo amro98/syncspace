@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express'
-import { rateLimit } from 'express-rate-limit'
+import { ipKeyGenerator, rateLimit } from 'express-rate-limit'
 
 import { env } from '@/config/env'
 import { rateLimited } from '@/lib/errors'
@@ -58,4 +58,29 @@ export function createAuthRateLimiters({
     resetPassword: make('resetPassword'),
     oauth: make('oauth'),
   }
+}
+
+/** Uploads per signed-in user per 15 minutes (production). Development gets 10× headroom. */
+export const UPLOAD_RATE_LIMIT = 100
+
+/**
+ * Limits multipart (file) requests per user, so storage cannot be flooded.
+ * Plain JSON requests on the same routes (text messages) are not counted.
+ */
+export function createUploadRateLimiter({
+  enabled,
+  multiplier = env.isProduction ? 1 : 10,
+}: AuthRateLimitOptions): RequestHandler {
+  if (!enabled) return passThrough
+  return rateLimit({
+    windowMs: FIFTEEN_MINUTES,
+    limit: UPLOAD_RATE_LIMIT * multiplier,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    skip: (req) => !req.is('multipart/form-data'),
+    keyGenerator: (req) => req.auth?.userId ?? ipKeyGenerator(req.ip ?? ''),
+    handler: (_req, _res, next) => {
+      next(rateLimited('Too many uploads. Please wait a few minutes and try again.'))
+    },
+  })
 }

@@ -35,5 +35,10 @@ export const readinessResponseSchema = z.object({
   status: z.enum(['ok', 'unavailable']),
   checks: z.object({
     database: z.enum(['ok', 'error', 'not_configured']),
+    /**
+     * Attachment storage. Informational: a storage outage degrades uploads
+     * only, so it never makes the API "unavailable" (chat keeps working).
+     */
+    storage: z.enum(['ok', 'error', 'disabled']),
   }),
 })

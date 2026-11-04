@@ -56,6 +56,14 @@ const STATUS_FALLBACK_CODES: Record<number, ErrorCode> = {
   503: 'SERVICE_UNAVAILABLE',
 }
 
+/**
+ * Absolute URL of an API path, for elements the browser fetches itself
+ * (`<img src>`, download links). Cookies authenticate them like API calls.
+ */
+export function apiUrl(path: string): string {
+  return buildUrl(path, undefined)
+}
+
 function buildUrl(path: string, query: RequestOptions['query']): string {
   if (!path.startsWith('/')) throw new Error(`API paths must start with "/": ${path}`)
   const url = new URL(`${env.VITE_API_BASE_URL}${path}`)

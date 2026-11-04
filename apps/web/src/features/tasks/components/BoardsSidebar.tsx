@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router'
 
 import { paths } from '@/app/router/paths'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 import { orderBoards } from '../cache'
@@ -48,6 +49,7 @@ export function BoardsSidebar({
           </button>
         )}
       </div>
+      {boards.isPending && <ListSkeleton rows={2} label="Loading boards" />}
       <ul aria-label="Boards" className="flex flex-col gap-0.5">
         {active.map((board) => (
           <li key={board.id}>

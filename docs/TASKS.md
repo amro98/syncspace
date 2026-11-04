@@ -216,11 +216,18 @@ viewer's timezone. Formatted dates are never stored.
 ## 10. Not built (by design or for later)
 
 - Time tracking, recurring tasks, subtasks, dependencies, calendar or Gantt views, automation,
-  file storage (attachments are metadata only), AI.
+  AI. (Task attachments are built: see [`UPLOADS.md`](UPLOADS.md).)
 - **@mentions:** a mention needs member autocomplete in the composer and mention metadata on
   messages. It's deferred to keep this phase focused. The notification type `MENTION` and the
   `message` link kind are already supported.
 - **Due-soon reminders:** these need a scheduler (cron or queue). The index on
   `(workspace_id, due_date)` is in place for it.
-- Board virtualization: boards stay responsive at a few hundred tasks (memoised cards, map
-  lookups). Very large boards would want column virtualization.
+- Boards are not virtualized, because column virtualization would fight drag and drop. Boards
+  stay responsive at several hundred tasks (tested with 400):
+  - cards are memoized;
+  - each column re-renders only when its own ids or task objects change (custom `memo`
+    comparator);
+  - cache writes keep untouched tasks referentially identical;
+  - filters take one clock reading per pass.
+
+  A development fixture (`npm run db:seed:large`) creates a 400-task board.

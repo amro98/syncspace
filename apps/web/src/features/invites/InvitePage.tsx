@@ -10,6 +10,7 @@ import { useLogout, useSession } from '@/features/auth/hooks'
 import { errorMessage } from '@/features/auth/messages'
 import { queryKeys } from '@/lib/query-keys'
 import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { acceptInvite, previewInvite } from './api'
 
@@ -21,6 +22,7 @@ const ROLE_LABEL = { OWNER: 'an owner', ADMIN: 'an admin', MEMBER: 'a member' } 
  * as someone else (explain and offer to switch accounts).
  */
 export function InvitePage() {
+  useDocumentTitle('Invitation')
   const { token = '' } = useParams()
   const invitePath = paths.invite(token)
   const navigate = useNavigate()

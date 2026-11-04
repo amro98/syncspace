@@ -10,6 +10,7 @@ import { errorMessage } from '@/features/auth/messages'
 import { RouteNotice, type NoticeState } from '@/features/chat/components/RouteNotice'
 import { useCurrentWorkspaceId, useWorkspaceActor } from '@/features/workspaces/hooks'
 import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { orderBoards } from '../cache'
 import { CreateBoardDialog } from '../components/BoardDialogs'
@@ -20,6 +21,7 @@ import { useBoards } from '../hooks'
  * still active), else the first active board, else an empty state.
  */
 export function TasksIndexPage() {
+  useDocumentTitle('Tasks')
   const workspaceId = useCurrentWorkspaceId()
   const boards = useBoards(workspaceId)
   const actor = useWorkspaceActor()

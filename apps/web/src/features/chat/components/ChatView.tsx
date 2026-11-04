@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router'
 import { queryKeys } from '@/lib/query-keys'
 
 import { removeOptimistic, type TimelineData, type TimelineMessage } from '../cache'
-import { destinationKey, useSendMessage, useWorkspaceMembers } from '../hooks'
+import { destinationKey, outbox, useSendMessage, useWorkspaceMembers } from '../hooks'
 import { postingBlockedReason } from '../policy'
 import { useDestinationRoom } from '../realtime'
 import { Composer } from './Composer'
@@ -60,8 +60,8 @@ export function ChatView({
   }, [setSearchParams])
 
   const sendContent = useCallback(
-    (content: string) => {
-      sendMessage({ content, clientMessageId: crypto.randomUUID() })
+    (content: string, files: File[] = []) => {
+      sendMessage({ content, clientMessageId: crypto.randomUUID(), files })
     },
     [sendMessage],
   )
@@ -69,6 +69,7 @@ export function ChatView({
     (message: TimelineMessage) => {
       if (!message.clientMessageId) return
       const clientMessageId = message.clientMessageId
+      outbox.delete(clientMessageId)
       queryClient.setQueryData<TimelineData>(queryKeys.messages.destination(destination), (data) =>
         removeOptimistic(data, clientMessageId),
       )
@@ -77,8 +78,9 @@ export function ChatView({
   )
   const retry = useCallback(
     (message: TimelineMessage) => {
+      const unsent = message.clientMessageId ? outbox.get(message.clientMessageId) : undefined
       discard(message)
-      sendContent(message.content)
+      sendContent(unsent?.content ?? message.content, unsent?.files ?? [])
     },
     [discard, sendContent],
   )

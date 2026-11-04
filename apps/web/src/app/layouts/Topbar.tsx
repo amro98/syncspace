@@ -46,7 +46,8 @@ export function Topbar() {
       >
         <Menu aria-hidden />
       </Button>
-      <Logo className="md:hidden" />
+      {/* Wordmark only where it fits next to search, status, bell, theme and account. */}
+      <Logo className="hidden min-[400px]:flex md:hidden" />
 
       <div className="flex flex-1 justify-end sm:justify-center">
         <button
@@ -54,7 +55,7 @@ export function Topbar() {
           onClick={() => {
             setSearching(true)
           }}
-          aria-label="Search messages"
+          aria-label="Search messages and tasks"
           className="flex h-8 items-center gap-2 rounded-md border bg-muted/50 px-2 text-sm whitespace-nowrap text-muted-foreground hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:w-full sm:max-w-md sm:px-3"
         >
           <Search className="size-4" aria-hidden />

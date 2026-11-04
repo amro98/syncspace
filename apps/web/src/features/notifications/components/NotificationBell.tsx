@@ -20,8 +20,8 @@ import {
 import { memo, useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
-import { Spinner } from '@/components/shared/Spinner'
 import { Button } from '@/components/ui/button'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { errorMessage } from '@/features/auth/messages'
 import { formatCount, formatRelative } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -183,9 +183,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {inbox.isPending ? (
-          <div className="flex justify-center py-8 text-muted-foreground">
-            <Spinner label="Loading notifications" />
-          </div>
+          <ListSkeleton rows={4} label="Loading notifications" className="gap-4 py-4" />
         ) : inbox.isError ? (
           <p role="alert" className="p-4 text-sm text-danger">
             {errorMessage(inbox.error)}

@@ -58,6 +58,21 @@ const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASSWORD: z.string().optional(),
     SMTP_FROM: z.string().default('SyncSpace <no-reply@syncspace.local>'),
+
+    // Attachments. "local" writes to disk (development only), "s3" uses any S3-compatible
+    // provider (Cloudflare R2 recommended, see docs/UPLOADS.md), "disabled" turns uploads off.
+    STORAGE_DRIVER: z.enum(['local', 's3', 'disabled']).default('local'),
+    LOCAL_STORAGE_DIR: z.string().default('.uploads'),
+    S3_BUCKET: z.string().optional(),
+    /** "auto" for Cloudflare R2; the bucket's region for AWS S3. */
+    S3_REGION: z.string().default('auto'),
+    /** Custom endpoint (R2: https://<account-id>.r2.cloudflarestorage.com). Empty for AWS S3. */
+    S3_ENDPOINT: z.url().optional(),
+    S3_ACCESS_KEY_ID: z.string().optional(),
+    S3_SECRET_ACCESS_KEY: z.string().optional(),
+    S3_FORCE_PATH_STYLE: z.stringbool().default(false),
+    /** Lifetime of signed download URLs. Short: links are re-issued on every open. */
+    UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(30).max(3600).default(300),
   })
   .superRefine((env, ctx) => {
     if (env.COOKIE_SAME_SITE === 'none' && env.NODE_ENV !== 'production') {
@@ -67,15 +82,47 @@ const envSchema = z
         message: '"none" requires Secure cookies, which only production (HTTPS) uses',
       })
     }
+    if (env.STORAGE_DRIVER === 's3') {
+      for (const key of ['S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'is required when STORAGE_DRIVER=s3',
+          })
+        }
+      }
+    }
     if (env.NODE_ENV !== 'production') return
     for (const key of ['DATABASE_URL', 'JWT_SECRET', 'FRONTEND_URL', 'API_PUBLIC_URL'] as const) {
       if (!env[key]) {
         ctx.addIssue({ code: 'custom', path: [key], message: 'is required in production' })
       }
     }
+    if (env.STORAGE_DRIVER === 'local') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['STORAGE_DRIVER'],
+        message:
+          'must be "s3" (or "disabled") in production: the local disk of a hosted container is not durable',
+      })
+    }
   })
   .transform(({ JWT_SECRET, FRONTEND_URL, API_PUBLIC_URL, ...env }) => ({
     ...env,
+    storage: {
+      driver: env.STORAGE_DRIVER,
+      localDir: env.LOCAL_STORAGE_DIR,
+      s3: {
+        bucket: env.S3_BUCKET ?? '',
+        region: env.S3_REGION,
+        endpoint: env.S3_ENDPOINT,
+        accessKeyId: env.S3_ACCESS_KEY_ID ?? '',
+        secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? '',
+        forcePathStyle: env.S3_FORCE_PATH_STYLE,
+        urlTtlSeconds: env.UPLOAD_URL_TTL_SECONDS,
+      },
+    },
     FRONTEND_URL: FRONTEND_URL ?? 'http://localhost:5173',
     API_PUBLIC_URL: API_PUBLIC_URL ?? `http://localhost:${String(env.PORT)}`,
     JWT_SECRET: JWT_SECRET ?? DEV_JWT_SECRET,

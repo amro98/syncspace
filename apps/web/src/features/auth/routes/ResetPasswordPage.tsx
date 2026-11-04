@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { queryKeys } from '@/lib/query-keys'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { resetPassword, verifyResetToken } from '../api'
 import { AuthCard, FieldError } from '../components/AuthCard'
@@ -29,6 +30,7 @@ const resetFormSchema = z
 type ResetFormValues = z.infer<typeof resetFormSchema>
 
 export function ResetPasswordPage() {
+  useDocumentTitle('Reset password')
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
   const navigate = useNavigate()

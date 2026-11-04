@@ -47,6 +47,13 @@ export const ERROR_CODES = {
   // Boards
   /** A column that still holds active tasks cannot be deleted: move them first. */
   COLUMN_NOT_EMPTY: 'COLUMN_NOT_EMPTY',
+
+  // Uploads
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+  /** Not one of the allowed types, or the content does not match the claimed type. */
+  FILE_TYPE_NOT_ALLOWED: 'FILE_TYPE_NOT_ALLOWED',
+  /** Uploads are disabled or the storage provider is unreachable. */
+  STORAGE_UNAVAILABLE: 'STORAGE_UNAVAILABLE',
 } as const
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
@@ -85,4 +92,8 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   INVITE_EMAIL_MISMATCH: 403,
 
   COLUMN_NOT_EMPTY: 409,
+
+  FILE_TOO_LARGE: 413,
+  FILE_TYPE_NOT_ALLOWED: 415,
+  STORAGE_UNAVAILABLE: 503,
 }

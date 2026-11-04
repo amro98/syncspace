@@ -13,12 +13,26 @@ import type { z } from 'zod'
 import { badRequest, conflict } from '@/lib/errors'
 import { authorize, canCreateTask } from '@/lib/permissions'
 import { getPrisma } from '@/lib/prisma'
+import {
+  attachmentRows,
+  discardObjects,
+  requireStorage,
+  storeFiles,
+  withStoredFiles,
+} from '@/modules/attachments/attachments.service'
+import type { IncomingFile } from '@/modules/attachments/files'
 import { makeSnippet } from '@/modules/chat/search.service'
 import { notifyTaskAssigned, notifyTaskCompleted } from '@/modules/notifications/triggers'
 import type { WorkspaceAccess } from '@/modules/workspaces/workspace-access'
 import { realtime } from '@/sockets/realtime'
 
-import { type BoardAccess, authorizeTaskEdit, boardRoom, type TaskAccess } from './access'
+import {
+  type BoardAccess,
+  authorizeTaskEdit,
+  boardRoom,
+  loadTaskById,
+  type TaskAccess,
+} from './access'
 import { taskOrder, taskSelect, toTaskDto } from './presenters'
 
 const ARCHIVED_BOARD = 'This board is archived. Restore it to make changes.'
@@ -281,6 +295,45 @@ export async function setTaskArchived(access: TaskAccess, archived: boolean): Pr
     where: { id: access.task.id },
     data: { archivedAt: archived ? (access.task.archivedAt ?? new Date()) : null },
   })
+  return broadcastTask(await loadTaskDto(access.task.id), SERVER_EVENTS.TASK_UPDATED)
+}
+
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
+
+/**
+ * Adds files to a task (anyone who can edit it). Files are validated and
+ * stored first, then recorded in one transaction; a failed write removes the
+ * stored objects again. Everyone on the board gets the updated task.
+ */
+export async function addTaskAttachments(access: TaskAccess, files: IncomingFile[]): Promise<Task> {
+  authorizeTaskEdit(access)
+  if (access.task.archivedAt) throw conflict('Restore this task before adding files.')
+  if (files.length === 0) throw badRequest('Choose at least one file.')
+  const stored = await storeFiles(access.board.workspaceId, files)
+  await withStoredFiles(stored, () =>
+    getPrisma().attachment.createMany({
+      data: attachmentRows(
+        stored,
+        { taskId: access.task.id },
+        access.board.workspaceId,
+        access.workspace.actor.userId,
+        requireStorage().driver,
+      ),
+    }),
+  )
+  return broadcastTask(await loadTaskDto(access.task.id), SERVER_EVENTS.TASK_UPDATED)
+}
+
+export async function removeTaskAttachment(
+  userId: string,
+  attachment: { id: string; taskId: string; storageKey: string | null },
+): Promise<Task> {
+  const access = await loadTaskById(userId, attachment.taskId)
+  authorizeTaskEdit(access)
+  await getPrisma().attachment.delete({ where: { id: attachment.id } })
+  await discardObjects([attachment.storageKey])
   return broadcastTask(await loadTaskDto(access.task.id), SERVER_EVENTS.TASK_UPDATED)
 }
 

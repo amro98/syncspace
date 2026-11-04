@@ -10,7 +10,7 @@ import { getPrisma } from '@/lib/prisma'
 import { createUser, sessionCookie, setCookies } from '@/test/helpers'
 
 import { errorHandler } from './error-handler'
-import { requestLogger } from './request-logger'
+import { requestLogger, scrubUrl } from './request-logger'
 import { requireAuth } from './require-auth'
 import { validate } from './validate'
 
@@ -104,5 +104,18 @@ describe('requireAuth middleware', () => {
     const cookie = sessionCookie(user)
     await getPrisma().user.delete({ where: { id: user.id } })
     await request(app).get('/me').set('Cookie', cookie).expect(401)
+  })
+})
+
+describe('request log scrubbing', () => {
+  it('logs paths and parameter names but never query values', () => {
+    expect(scrubUrl('/auth/oauth/google/callback?code=SECRET&state=abc')).toBe(
+      '/auth/oauth/google/callback?code=…&state=…',
+    )
+    expect(scrubUrl('/workspaces/w/search/messages?q=salary')).toBe(
+      '/workspaces/w/search/messages?q=…',
+    )
+    expect(scrubUrl('/health')).toBe('/health')
+    expect(scrubUrl(undefined)).toBe('')
   })
 })

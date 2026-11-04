@@ -2,11 +2,13 @@ import { canInviteMember } from '@syncspace/shared'
 
 import { InviteForm } from '../components/InviteForm'
 import { useCurrentWorkspaceId, useWorkspace, useWorkspaceActor } from '../hooks'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Admin', MEMBER: 'Member' } as const
 
 /** Workspace settings: details and invitations (member management grows here later). */
 export function WorkspaceSettingsPage() {
+  useDocumentTitle('Settings')
   const workspaceId = useCurrentWorkspaceId()
   const { data: workspace } = useWorkspace(workspaceId)
   const actor = useWorkspaceActor()

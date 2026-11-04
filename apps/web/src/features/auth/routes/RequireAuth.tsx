@@ -5,6 +5,7 @@ import { FullPageSpinner } from '@/components/shared/Spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useRealtimeConnection } from '@/features/realtime/hooks'
+import { useUiStore } from '@/stores/ui-store'
 
 import { useSession } from '../hooks'
 import { errorMessage } from '../messages'
@@ -38,13 +39,26 @@ function SignedInArea({ userId }: { userId: string }) {
 export function RequireAuth() {
   const session = useSession()
   const location = useLocation()
+  const sessionExpired = useUiStore((state) => state.sessionExpired)
+  const signedOut = useUiStore((state) => state.signedOut)
 
   if (session.isPending) return <FullPageSpinner />
   if (session.isError) {
     return <SessionError error={session.error} retry={() => void session.refetch()} />
   }
   if (!session.data) {
-    return <Navigate to={paths.login({ redirect: location.pathname + location.search })} replace />
+    // After an explicit sign-out the next person starts fresh (no redirect into
+    // the previous account's pages); otherwise come back here after signing in.
+    if (signedOut) return <Navigate to={paths.login()} replace />
+    return (
+      <Navigate
+        to={paths.login({ redirect: location.pathname + location.search })}
+        replace
+        state={
+          sessionExpired ? { notice: 'Your session expired. Sign in again to continue.' } : null
+        }
+      />
+    )
   }
   return <SignedInArea userId={session.data.id} />
 }

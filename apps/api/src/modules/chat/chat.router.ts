@@ -30,6 +30,8 @@ import { type Request, Router } from 'express'
 
 import { requireAuth } from '@/middleware/require-auth'
 import { validate } from '@/middleware/validate'
+import { uploadRateLimit } from '@/modules/attachments/attachments.router'
+import { parseMultipart } from '@/modules/attachments/multipart'
 import { getWorkspaceAccess } from '@/modules/workspaces/workspace-access'
 
 import {
@@ -219,9 +221,11 @@ for (const [segment, load] of [
 
   chatWorkspaceRouter.post(
     `/${segment}/messages`,
+    uploadRateLimit,
+    parseMultipart,
     validate({ body: sendMessageInputSchema }),
     async (req, res) => {
-      const body: Message = await sendMessage(await load(req), req.body)
+      const body: Message = await sendMessage(await load(req), req.body, req.files ?? [])
       res.status(201).json(body)
     },
   )
@@ -283,9 +287,16 @@ messagesRouter.get(
 
 messagesRouter.post(
   '/:messageId/replies',
+  uploadRateLimit,
+  parseMultipart,
   validate({ body: sendMessageInputSchema }),
   async (req, res) => {
-    const body: Message = await replyToMessage(userId(req), param(req, 'messageId'), req.body)
+    const body: Message = await replyToMessage(
+      userId(req),
+      param(req, 'messageId'),
+      req.body,
+      req.files ?? [],
+    )
     res.status(201).json(body)
   },
 )

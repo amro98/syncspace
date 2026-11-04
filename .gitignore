@@ -12,6 +12,9 @@ apps/api/src/generated/
 # Local embedded PostgreSQL data (npm run db:local)
 apps/api/.pglite/
 
+# Local attachment storage (STORAGE_DRIVER=local, development only)
+apps/api/.uploads/
+
 # Environment (examples are committed)
 .env
 .env.*

@@ -153,7 +153,7 @@ describe('chat navigation and sidebar', () => {
     expect(composer(/Message Grace Hopper/)).toBeInTheDocument()
   })
 
-  it('searches messages and opens a result in its thread', async () => {
+  it('searches messages and tasks from the keyboard and opens a result in its thread', async () => {
     const user = userEvent.setup()
     const found = message({ content: 'deploy is green' })
     const routes = chatRoutes()
@@ -174,16 +174,47 @@ describe('chat navigation and sidebar', () => {
         },
       }
     }
+    routes[`GET ${chatBase}/tasks/search`] = {
+      body: {
+        items: [
+          {
+            taskId: '01920000-7c00-7000-8000-000000009991',
+            boardId: '01920000-7c00-7000-8000-000000009992',
+            boardName: 'Ops',
+            title: 'Deploy checklist',
+            priority: 'HIGH',
+            completedAt: null,
+            snippet: null,
+          },
+        ],
+      },
+    }
     routes[`GET /messages/${found.id}/replies`] = {
       body: { parent: found, items: [], nextCursor: null },
     }
     mockApi(routes)
     const { router } = renderRoute(channelPath(general.id))
+    await screen.findByRole('heading', { level: 1, name: /general/ })
 
-    await user.click(await screen.findByRole('button', { name: /Search messages/ }))
-    await user.type(screen.getByRole('searchbox', { name: 'Search messages' }), 'deploy')
-    const results = await screen.findByRole('list', { name: 'Search results' })
-    await user.click(within(results).getByRole('button', { name: /Grace Hopper/ }))
+    // Ctrl+K opens, Escape closes.
+    await user.keyboard('{Control>}k{/Control}')
+    expect(screen.getByRole('dialog', { name: 'Search' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Search' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Search messages and tasks/ }))
+    const input = screen.getByRole('combobox', { name: 'Search messages and tasks' })
+    await user.type(input, 'deploy')
+    const results = await screen.findByRole('listbox', { name: 'Search results' })
+    expect(within(results).getByRole('group', { name: 'Messages' })).toBeInTheDocument()
+    const [messageOption, taskOption] = await within(results).findAllByRole('option')
+    expect(messageOption).toHaveAttribute('aria-selected', 'true')
+
+    await user.keyboard('{ArrowDown}')
+    expect(taskOption).toHaveAttribute('aria-selected', 'true')
+    expect(taskOption).toHaveTextContent('Deploy checklist')
+    expect(input).toHaveAttribute('aria-activedescendant', taskOption?.id)
+    await user.keyboard('{ArrowUp}{Enter}')
 
     await waitFor(() => {
       expect(router.state.location.search).toBe(`?thread=${found.id}`)

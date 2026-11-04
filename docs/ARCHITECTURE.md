@@ -377,12 +377,16 @@ Notes for the deployment phase:
   health check path `/health`. Set `NODE_ENV=production`, `DATABASE_URL`, `JWT_SECRET`,
   `CORS_ORIGIN`, `FRONTEND_URL`.
 - Use same-site custom domains (see §11).
+- **Attachments** use an S3-compatible bucket (Cloudflare R2 recommended); production refuses
+  local-disk storage. Full checklist, environment table and database steps:
+  [`DEPLOYMENT.md`](DEPLOYMENT.md).
 - Starts as a **single API instance**. Scaling horizontally requires the Socket.IO Redis adapter
   (and Redis-backed presence); the `InterServerEvents` map is reserved for that.
 
 ## 17. Runtime and tooling versions
 
-- Node **22 LTS** recommended (`.nvmrc`); `^20.19 || >=22.12` supported (`engines`).
+- Node **22 LTS** recommended (`.nvmrc`); `^20.19 || >=22.12` supported (`engines`). Verified:
+  typecheck, build and every test suite pass on Node 20.19 and 22.23.
 - npm **10+** recommended. npm 9 works with the committed lockfile but its dependency resolver can
   crash when _adding_ packages to this workspace.
 - TypeScript 6.0 in strict mode (+ `noUncheckedIndexedAccess`, `noImplicitOverride`,
@@ -413,3 +417,27 @@ functions over plain context objects are trivially unit-testable.
 - Client-side checks are UX only; every mutation is re-authorised by the API.
 - The database enforces the structural invariants (tenancy, membership, ownership) independently,
   as a backstop for bugs in application code.
+
+## 19. Attachments and object storage
+
+- One storage interface (`apps/api/src/lib/storage`) with `local` (development), `s3`
+  (production: R2/S3/MinIO) and `memory` (tests) adapters. Services never import a provider SDK.
+- Uploads are multipart requests to the owning resource (message send / reply, task). The file
+  is validated by content, stored under a generated key, and then the owner and attachment rows
+  are written in one transaction. Any failure removes the stored objects. There is no "pending
+  upload" state (the database requires every attachment to have an owner).
+- Downloads go through `GET /attachments/:id/content`, which checks access to the owner and then
+  streams the file (local) or 302s to a short-lived signed URL (private bucket).
+- Details: [`UPLOADS.md`](UPLOADS.md).
+
+## 20. Rendering performance
+
+- **Chat:** the timeline is virtualized (`@tanstack/react-virtual`, `anchorTo: 'end'` for
+  prepending, measured heights). See [`CHAT.md`](CHAT.md) §12.
+- **Kanban:** not virtualized, to keep drag and drop reliable. Columns re-render only when their
+  own tasks change, and cache writes preserve object identity.
+- Props passed to memoized rows are kept referentially stable: interned permission policies and a
+  memoized actor. Ephemeral UI state (typing, drafts, toasts) lives in small Zustand stores that
+  components subscribe to by selector.
+- Transient feedback uses one toaster (`stores/toast-store.ts`), for background or optimistic
+  failures only. Forms, the composer and panels report their errors inline.

@@ -150,6 +150,40 @@ describe('board and task realtime', () => {
   })
 })
 
+describe('attachment realtime', () => {
+  const PNG = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(16, 1),
+  ])
+
+  it('delivers message and task attachments in the realtime payloads', async () => {
+    const ws = await taskWorkspace()
+    const member = await inWorkspace(ws, ws.member.user)
+
+    const created = next(member, SERVER_EVENTS.MESSAGE_CREATED)
+    await ws.owner.agent
+      .post(`${ws.base}/channels/${ws.general.id}/messages`)
+      .field('content', 'screenshot')
+      .attach('files', PNG, { filename: 'screen.png', contentType: 'image/png' })
+      .expect(201)
+    expect((await created).message.attachments).toEqual([
+      expect.objectContaining({ fileName: 'screen.png', mimeType: 'image/png' }),
+    ])
+
+    const { board, todo } = await boardWithColumns(ws.owner.agent, ws.base)
+    const task = await createTaskAs(ws.owner.agent, board.id, {
+      columnId: todo.id,
+      title: 'With file',
+    })
+    const updated = next(member, SERVER_EVENTS.TASK_UPDATED)
+    await ws.owner.agent
+      .post(`/tasks/${task.id}/attachments`)
+      .attach('files', PNG, { filename: 'mock.png', contentType: 'image/png' })
+      .expect(201)
+    expect((await updated).task.attachments.map((a) => a.fileName)).toEqual(['mock.png'])
+  })
+})
+
 describe('notification realtime', () => {
   it('pushes assignment notifications with the unread count to the assignee only', async () => {
     const ws = await taskWorkspace()

@@ -8,6 +8,7 @@ import type {
 } from '@syncspace/shared'
 
 import type { Prisma } from '@/generated/prisma/client'
+import { attachmentSelect, toAttachmentDto } from '@/modules/attachments/attachments.service'
 
 /**
  * The single place where chat rows become API/socket DTOs. Only public user
@@ -113,10 +114,7 @@ export const messageSelect = {
     select: { emoji: true, userId: true },
     orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
   },
-  attachments: {
-    select: { id: true, fileName: true, mimeType: true, size: true, url: true },
-    orderBy: { createdAt: 'asc' },
-  },
+  attachments: { select: attachmentSelect, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
   _count: { select: { replies: { where: { deletedAt: null } } } },
 } satisfies Prisma.MessageSelect
 
@@ -159,6 +157,6 @@ export function toMessageDto(message: MessageRow): Message {
     deletedAt: message.deletedAt?.toISOString() ?? null,
     reactions: deleted ? [] : summariseReactions(message.reactions),
     replyCount: message._count.replies,
-    attachments: deleted ? [] : message.attachments,
+    attachments: deleted ? [] : message.attachments.map(toAttachmentDto),
   }
 }

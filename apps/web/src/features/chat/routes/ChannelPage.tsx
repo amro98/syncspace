@@ -7,6 +7,7 @@ import { Spinner } from '@/components/shared/Spinner'
 import { errorMessage } from '@/features/auth/messages'
 import { useCurrentWorkspaceId, useWorkspaceActor } from '@/features/workspaces/hooks'
 import { formatFullDate } from '@/lib/format'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { ChannelSettingsDialog } from '../components/ChannelSettingsDialog'
 import { ChatView } from '../components/ChatView'
@@ -25,6 +26,10 @@ export function ChannelPage() {
   const actor = useWorkspaceActor()
   const destination = useMemo(() => ({ kind: 'channel' as const, id: channelId }), [channelId])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const channel = channels.data?.find((item) => item.id === channelId)
+  useDocumentTitle(
+    channel ? (channel.type === 'PRIVATE' ? channel.name : `#${channel.name}`) : 'Channel',
+  )
 
   if (channels.isPending || !actor) {
     return (
@@ -41,7 +46,6 @@ export function ChannelPage() {
     )
   }
 
-  const channel = channels.data.find((item) => item.id === channelId)
   if (!channel) {
     const state: NoticeState = { notice: CHANNEL_GONE_NOTICE }
     return <Navigate to={paths.workspace(workspaceId)} replace state={state} />

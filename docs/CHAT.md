@@ -240,22 +240,33 @@ features/chat/
   a private channel, deleted), the page redirects to the workspace with a notice. It never
   renders stale private content.
 
-## 12. Attachments (foundation only)
+## 12. Attachments and the virtualized timeline
 
-The schema already has `Attachment` rows linked to messages, and every `Message` DTO carries
-`attachments: Attachment[]` (empty for now). The composer keeps a toolbar slot for an attach
-button. Uploading needs:
+**Attachments.** Messages can carry files: text, files, or both. They upload together with the
+message in one multipart request: validate → store → transaction → event. The optimistic row
+shows the files as uploading and only turns "sent" when the server confirms. A failed send keeps
+its text and files for **Retry**. Images render as fixed-size thumbnails with a preview dialog;
+other files render as cards. Storage, validation, access control and cleanup are described in
+[`UPLOADS.md`](UPLOADS.md).
 
-1. a storage adapter (S3-compatible) with pre-signed uploads;
-2. `POST /attachments` to issue upload URLs, then send the message with `attachmentIds`;
-3. rendering previews in `MessageItem`.
+**Virtualization.** `MessageTimeline` uses `@tanstack/react-virtual`:
 
-None of this ships in this phase. No files are accepted, stored or served.
+- Only the rows near the viewport are in the DOM: day separators, the "New messages" divider
+  and messages. A 1,000-message channel renders about 30 rows.
+- Heights are measured as rows render. Thumbnails have a fixed box, so loading images never
+  shifts the list.
+- `anchorTo: 'end'` keeps the message you are reading in place when older pages are
+  **prepended**. `followOnAppend` follows **new** messages only while you are at the bottom.
+  Your own sent message always scrolls into view.
+- Initial position, "Jump to unread" and "Jump to newest" use `scrollToIndex`.
+- Older pages load when you scroll within 400 px of the top. A history too short to scroll keeps
+  loading. A failed older page shows an inline Retry row instead of replacing the timeline.
+- Rows are memoized. Policies are interned shared objects, and the actor object is stable. So
+  typing (Zustand, its own component), presence (member cache) and a reaction on one message
+  don't re-render the other rows.
 
 ## 13. Known limitations
 
-- Messages render without list virtualization. Paging keeps the DOM bounded to what the user
-  scrolled through. Virtualization is a later optimization.
 - Search is substring (`ILIKE`). Full-text ranking (`tsvector`) is a later improvement.
 - Presence and typing are per API instance (see §7).
 - Thread replies are not optimistic (they appear on server confirmation, typically within

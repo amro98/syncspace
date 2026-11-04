@@ -10,6 +10,7 @@ import { type AuthRateLimitOptions, createAuthRateLimiters } from '@/middleware/
 import { requestLogger } from '@/middleware/request-logger'
 import { verifyOrigin } from '@/middleware/verify-origin'
 import { createAuthRouter } from '@/modules/auth/auth.router'
+import { attachmentsRouter } from '@/modules/attachments/attachments.router'
 import { messagesRouter } from '@/modules/chat/chat.router'
 import { notificationsRouter } from '@/modules/notifications/notifications.router'
 import { boardsRouter, labelsRouter, tasksRouter } from '@/modules/tasks/tasks.router'
@@ -51,6 +52,7 @@ export function createApp({
   app.use('/tasks', tasksRouter)
   app.use('/task-labels', labelsRouter)
   app.use('/notifications', notificationsRouter)
+  app.use('/attachments', attachmentsRouter)
 
   // Captured-mail viewer; exists only in development (never in test or production).
   if (env.NODE_ENV === 'development') app.use('/dev/mail', devMailRouter)

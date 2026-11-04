@@ -17,6 +17,9 @@ import {
   type UpdateTaskLabelInput,
 } from '@syncspace/shared'
 
+import { z } from 'zod'
+
+import { toFormData } from '@/features/attachments/files'
 import { apiClient } from '@/lib/api-client'
 
 const ws = (workspaceId: string) => `/workspaces/${encodeURIComponent(workspaceId)}`
@@ -136,6 +139,21 @@ export function setTaskArchived(taskId: string, archived: boolean) {
   return apiClient.post(`/tasks/${taskId}/${archived ? 'archive' : 'restore'}`, {
     schema: taskSchema,
   })
+}
+
+/** Uploads files to a task (multipart); answers with the updated task. */
+export function addTaskAttachments(taskId: string, files: File[]) {
+  return apiClient.post(`/tasks/${taskId}/attachments`, {
+    body: toFormData({}, files),
+    schema: taskSchema,
+  })
+}
+
+export async function removeTaskAttachment(attachmentId: string) {
+  const { task } = await apiClient.delete(`/attachments/${attachmentId}`, {
+    schema: z.object({ task: taskSchema }),
+  })
+  return task
 }
 
 export async function searchTasks(workspaceId: string, q: string, signal?: AbortSignal) {

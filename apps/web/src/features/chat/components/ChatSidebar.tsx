@@ -14,6 +14,7 @@ import { NavLink } from 'react-router'
 import { paths } from '@/app/router/paths'
 import { Avatar } from '@/components/shared/Avatar'
 import { PresenceDot } from '@/components/shared/PresenceDot'
+import { ListSkeleton } from '@/components/ui/skeleton'
 import { formatCount } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -172,7 +173,7 @@ export function ChatSidebar({
           )
         }
       />
-      {channels.isPending && <p className="px-3 text-xs text-sidebar-foreground/60">Loading…</p>}
+      {channels.isPending && <ListSkeleton label="Loading channels" />}
       {channels.isError && <p className="px-3 text-xs text-danger">Could not load channels.</p>}
       <ul aria-label="Channels" className="flex flex-col gap-0.5">
         {active.map((channel) => (
@@ -210,6 +211,7 @@ export function ChatSidebar({
           )
         }
       />
+      {conversations.isPending && <ListSkeleton rows={2} label="Loading direct messages" />}
       {conversations.isError && (
         <p className="px-3 text-xs text-danger">Could not load conversations.</p>
       )}

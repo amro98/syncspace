@@ -14,7 +14,6 @@ import {
   ArrowUp,
   CheckCircle2,
   Circle,
-  Paperclip,
   UserPlus,
   X,
 } from 'lucide-react'
@@ -38,6 +37,7 @@ import {
   useSetTaskLabels,
   useUpdateTask,
 } from '../hooks'
+import { TaskAttachments } from './TaskAttachments'
 import { DueBadge, LabelChip, PriorityBadge } from './TaskBits'
 
 function Field({
@@ -252,7 +252,7 @@ export function TaskPanel({
             )}
           </div>
         ) : (
-          <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4 [&>*]:shrink-0">
             {task.archivedAt && (
               <p
                 role="status"
@@ -521,19 +521,7 @@ export function TaskPanel({
               }}
             />
 
-            {task.attachments.length > 0 && (
-              <section className="flex flex-col gap-1.5">
-                <h3 className="text-xs font-medium text-muted-foreground">Attachments</h3>
-                <ul className="flex flex-col gap-1 text-sm">
-                  {task.attachments.map((file) => (
-                    <li key={file.id} className="flex items-center gap-2">
-                      <Paperclip className="size-3.5 text-muted-foreground" aria-hidden />
-                      <span className="truncate">{file.fileName}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+            <TaskAttachments workspaceId={workspaceId} task={task} editable={editable} />
 
             <footer className="mt-auto flex flex-col gap-3 border-t pt-4 text-xs text-muted-foreground">
               <p>

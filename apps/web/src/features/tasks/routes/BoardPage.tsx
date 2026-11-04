@@ -1,21 +1,23 @@
 import { canEditTask, canManageBoard, type BoardContext } from '@syncspace/shared'
-import { Archive, ArchiveRestore, KanbanSquare, Settings, X } from 'lucide-react'
+import { Archive, ArchiveRestore, KanbanSquare, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { paths } from '@/app/router/paths'
-import { Spinner } from '@/components/shared/Spinner'
 import { Button } from '@/components/ui/button'
 import { useSession } from '@/features/auth/hooks'
 import { errorMessage } from '@/features/auth/messages'
 import { RouteNotice, type NoticeState } from '@/features/chat/components/RouteNotice'
 import { useWorkspaceMembers } from '@/features/chat/hooks'
 import { useCurrentWorkspaceId, useWorkspaceActor } from '@/features/workspaces/hooks'
+import { useDocumentTitle } from '@/lib/use-document-title'
+import { toast } from '@/stores/toast-store'
 import { useWorkspacePrefsStore } from '@/stores/workspace-prefs-store'
 
 import { orderBoards } from '../cache'
 import { ArchivedTasksDialog, BoardSettingsDialog } from '../components/BoardDialogs'
 import { BoardCanvas } from '../components/BoardCanvas'
+import { BoardSkeleton } from '../components/BoardSkeleton'
 import { FilterBar } from '../components/FilterBar'
 import { TaskPanel } from '../components/TaskPanel'
 import { matchesFilters, parseFilters, writeFilters } from '../filters'
@@ -36,9 +38,9 @@ export function BoardPage() {
   const setLastBoardId = useWorkspacePrefsStore((state) => state.setLastBoardId)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const [moveError, setMoveError] = useState<string | null>(null)
 
   const loaded = board.isSuccess
+  useDocumentTitle(board.data?.board.name ?? 'Board')
   useEffect(() => {
     if (loaded) setLastBoardId(workspaceId, boardId)
   }, [loaded, workspaceId, boardId, setLastBoardId])
@@ -46,11 +48,12 @@ export function BoardPage() {
   const filters = useMemo(() => parseFilters(searchParams), [searchParams])
   const taskId = searchParams.get('task')
   const detail = board.data
-  const visibleTasks = useMemo(
-    () =>
-      detail ? detail.tasks.filter((task) => matchesFilters(task, filters, user?.id ?? '')) : [],
-    [detail, filters, user?.id],
-  )
+  const visibleTasks = useMemo(() => {
+    if (!detail) return []
+    // One clock reading per filter pass (due-date filters), not one per task.
+    const now = new Date()
+    return detail.tasks.filter((task) => matchesFilters(task, filters, user?.id ?? '', now))
+  }, [detail, filters, user?.id])
   const boardTask = taskId ? detail?.tasks.find((task) => task.id === taskId) : undefined
   const fetchedTask = useTask(workspaceId, taskId ?? '', Boolean(taskId) && !boardTask && loaded)
   const panelTask = boardTask ?? fetchedTask.data
@@ -72,17 +75,12 @@ export function BoardPage() {
       return next
     })
   }, [setSearchParams])
+  // Rolled-back drags are reported as toasts: the card is already back where it was.
   const reportError = useCallback((message: string) => {
-    setMoveError(message)
+    toast.error(message)
   }, [])
 
-  if (board.isPending || !actor) {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Spinner label="Loading board" />
-      </div>
-    )
-  }
+  if (board.isPending || !actor) return <BoardSkeleton />
   if (board.isError) {
     if (board.error.code === 'NOT_FOUND' || board.error.code === 'VALIDATION_ERROR') {
       const state: NoticeState = { notice: 'That board is not available.' }
@@ -177,24 +175,6 @@ export function BoardPage() {
           This board is archived and read-only.
           {canManageBoard(actor, context) && ' Restore it from Board settings to make changes.'}
         </p>
-      )}
-      {moveError && (
-        <div
-          role="alert"
-          className="flex items-start gap-2 border-b bg-danger/10 px-4 py-2 text-sm text-danger"
-        >
-          <p className="flex-1">{moveError}</p>
-          <button
-            type="button"
-            aria-label="Dismiss"
-            className="rounded p-0.5 hover:bg-danger/10"
-            onClick={() => {
-              setMoveError(null)
-            }}
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </div>
       )}
 
       <div className="pt-2">

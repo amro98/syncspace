@@ -313,6 +313,20 @@ export function useSetTaskArchived(workspaceId: string) {
   })
 }
 
+export function useAddTaskAttachments(workspaceId: string) {
+  const apply = useApplyTask(workspaceId)
+  return useMutation({
+    mutationFn: ({ taskId, files }: { taskId: string; files: File[] }) =>
+      api.addTaskAttachments(taskId, files),
+    onSuccess: apply,
+  })
+}
+
+export function useRemoveTaskAttachment(workspaceId: string) {
+  const apply = useApplyTask(workspaceId)
+  return useMutation({ mutationFn: api.removeTaskAttachment, onSuccess: apply })
+}
+
 // ---------------------------------------------------------------------------
 // Labels
 // ---------------------------------------------------------------------------

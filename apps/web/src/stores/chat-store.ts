@@ -33,3 +33,10 @@ export const useChatStore = create<ChatUiState>()((set) => ({
     set({ readingKey })
   },
 }))
+
+/**
+ * Unsent messages (text + File objects) by clientMessageId, kept in memory
+ * only — never in the query cache — so a failed send can be retried without
+ * picking the files again. Cleared when the signed-in identity changes.
+ */
+export const chatOutbox = new Map<string, { content: string; files: File[] }>()

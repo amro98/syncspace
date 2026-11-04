@@ -35,7 +35,7 @@ describe('GET /health/ready', () => {
 
     expect(readinessResponseSchema.parse(response.body)).toEqual({
       status: 'ok',
-      checks: { database: 'ok' },
+      checks: { database: 'ok', storage: 'ok' },
     })
   })
 })

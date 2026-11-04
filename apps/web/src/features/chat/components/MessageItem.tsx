@@ -12,14 +12,22 @@ import { AlertCircle, MessageSquareReply, Pencil, Trash2 } from 'lucide-react'
 import { memo, type ReactNode, useState } from 'react'
 
 import { Avatar } from '@/components/shared/Avatar'
+import { LinkifiedText } from '@/components/shared/LinkifiedText'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
+import { AttachmentList } from '@/features/attachments/components/AttachmentList'
+import { PendingFiles } from '@/features/attachments/components/PendingFiles'
 import { errorMessage } from '@/features/auth/messages'
 import { formatFullDate, formatTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import type { TimelineMessage } from '../cache'
-import { useDeleteMessage, useEditMessage, useToggleReaction } from '../hooks'
+import {
+  useDeleteMessage,
+  useEditMessage,
+  useRemoveMessageAttachment,
+  useToggleReaction,
+} from '../hooks'
 import { EmojiPicker } from './EmojiPicker'
 
 export interface MessageItemProps {
@@ -122,6 +130,7 @@ function MessageItemImpl({
   const edit = useEditMessage()
   const remove = useDeleteMessage()
   const react = useToggleReaction()
+  const removeAttachment = useRemoveMessageAttachment()
 
   const pending = message.status !== undefined
   const deleted = message.deletedAt !== null
@@ -137,7 +146,7 @@ function MessageItemImpl({
     canDelete && message.author.id !== actor.userId && canModerateMessage(actor, context)
   const canReact = !pending && canReactToMessage(actor, context)
   const canReply = !pending && !inThread && canReplyToMessage(actor, context)
-  const actionError = edit.error ?? remove.error ?? react.error
+  const actionError = edit.error ?? remove.error ?? react.error ?? removeAttachment.error
 
   return (
     <article
@@ -196,17 +205,40 @@ function MessageItemImpl({
             }}
           />
         ) : (
-          <p className="text-sm break-words whitespace-pre-wrap">
-            {message.content}
-            {message.editedAt && (
-              <span
-                className="ml-1 text-xs text-muted-foreground"
-                title={formatFullDate(message.editedAt)}
-              >
-                (edited)
-              </span>
-            )}
-          </p>
+          (message.content || message.editedAt) && (
+            <p className="text-sm break-words whitespace-pre-wrap">
+              <LinkifiedText text={message.content} />
+              {message.editedAt && (
+                <span
+                  className="ml-1 text-xs text-muted-foreground"
+                  title={formatFullDate(message.editedAt)}
+                >
+                  (edited)
+                </span>
+              )}
+            </p>
+          )
+        )}
+
+        {!deleted && message.attachments.length > 0 && (
+          <AttachmentList
+            attachments={message.attachments}
+            className="mt-1.5"
+            onRemove={
+              canEdit
+                ? (attachment) => {
+                    removeAttachment.mutate(attachment.id)
+                  }
+                : undefined
+            }
+          />
+        )}
+        {message.pendingFiles && message.pendingFiles.length > 0 && (
+          <PendingFiles
+            files={message.pendingFiles}
+            uploading={message.status === 'sending'}
+            className="mt-1.5"
+          />
         )}
 
         {message.status === 'failed' && (

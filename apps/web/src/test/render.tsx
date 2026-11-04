@@ -6,6 +6,7 @@ import type {
   WorkspaceSummary,
 } from '@syncspace/shared'
 import { render } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { createMemoryRouter } from 'react-router'
 import { vi } from 'vitest'
 
@@ -17,14 +18,16 @@ import { createQueryClient } from '@/lib/query-client'
  * Renders the real route tree and providers at `path` with an isolated query
  * cache (the app's own QueryClient configuration, without retries).
  */
-export function renderRoute(path: string) {
+export function renderRoute(path: string, options: { strict?: boolean } = {}) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   const queryClient = createQueryClient()
   queryClient.setDefaultOptions({
     queries: { retry: false, gcTime: Infinity },
     mutations: { retry: false },
   })
-  const result = render(<App router={router} queryClient={queryClient} />)
+  const app = <App router={router} queryClient={queryClient} />
+  // StrictMode (as in main.tsx) double-invokes effects: catches listener/room leaks.
+  const result = render(options.strict ? <StrictMode>{app}</StrictMode> : app)
   return { ...result, router, queryClient }
 }
 
@@ -70,12 +73,28 @@ export function apiError(code: ErrorCode, status: number, message = 'Request fai
   return { status, body: { error: { code, message } } }
 }
 
+/** Multipart bodies are recorded as their text fields plus the names of the files. */
+function formDataSummary(form: FormData): { fields: Record<string, string>; files: string[] } {
+  const fields: Record<string, string> = {}
+  const files: string[] = []
+  form.forEach((value, key) => {
+    if (typeof value === 'string') fields[key] = value
+    else files.push(value.name)
+  })
+  return { fields, files }
+}
+
 export function mockApi(routes: MockRoutes) {
   const calls: ApiCall[] = []
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     const method = init?.method ?? 'GET'
-    const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
+    const body: unknown =
+      typeof init?.body === 'string'
+        ? JSON.parse(init.body)
+        : init?.body instanceof FormData
+          ? formDataSummary(init.body)
+          : undefined
     calls.push({ method, path: url.pathname, body })
 
     const route = routes[`${method} ${url.pathname}`]

@@ -18,6 +18,10 @@ import { notify } from './notifications.service'
  * the actor. Channel messages do not notify (unread badges cover them).
  */
 
+function describeFiles(count: number): string {
+  return count === 1 ? 'Sent a file' : `Sent ${String(count)} files`
+}
+
 async function actorName(userId: string): Promise<string> {
   const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { name: true } })
   return user?.name ?? 'Someone'
@@ -114,7 +118,7 @@ export async function notifyConversationMessage(
       actorId: authorId,
       type: 'MESSAGE',
       title,
-      body: message.content,
+      body: message.content || describeFiles(message.attachments.length),
       entityType: 'CONVERSATION',
       entityId: conversation.id,
     })),

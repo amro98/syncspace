@@ -166,6 +166,7 @@ export const reactionSummarySchema = z.object({
   userIds: z.array(idSchema),
 })
 
+/** Attachment metadata. `url` is an API path (`/attachments/:id/content`), access-checked. */
 export const attachmentSchema = z.object({
   id: idSchema,
   fileName: z.string(),
@@ -214,8 +215,20 @@ export const threadResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 })
 
+/**
+ * Sending: text, files, or both. As JSON (text only) or multipart/form-data
+ * (fields `content`, `clientMessageId`, files `files`). An empty `content`
+ * is accepted only when files are attached (checked by the API).
+ */
 export const sendMessageInputSchema = z.object({
-  content: messageContentSchema,
+  content: z
+    .string()
+    .trim()
+    .max(
+      LIMITS.MESSAGE_CONTENT_MAX,
+      `Messages are limited to ${String(LIMITS.MESSAGE_CONTENT_MAX)} characters`,
+    )
+    .default(''),
   /** Client-generated id echoed in the realtime event, so the sender can match its optimistic row. */
   clientMessageId: z.uuid().optional(),
 })

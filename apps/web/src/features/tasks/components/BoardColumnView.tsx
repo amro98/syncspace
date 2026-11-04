@@ -311,4 +311,23 @@ function BoardColumnViewImpl({
   )
 }
 
-export const BoardColumnView = memo(BoardColumnViewImpl)
+type ColumnProps = Parameters<typeof BoardColumnViewImpl>[0]
+
+/**
+ * Re-render a column only when ITS content changed: same ids in the same order
+ * and the same task objects (cache writes keep untouched tasks' identity), plus
+ * unchanged scalar props. A realtime update to one task re-renders one column.
+ */
+function sameColumn(previous: ColumnProps, next: ColumnProps): boolean {
+  for (const key of Object.keys(next) as (keyof ColumnProps)[]) {
+    if (key === 'taskIds' || key === 'taskById') continue
+    if (previous[key] !== next[key]) return false
+  }
+  if (previous.taskIds.length !== next.taskIds.length) return false
+  return next.taskIds.every(
+    (id, index) =>
+      previous.taskIds[index] === id && previous.taskById.get(id) === next.taskById.get(id),
+  )
+}
+
+export const BoardColumnView = memo(BoardColumnViewImpl, sameColumn)

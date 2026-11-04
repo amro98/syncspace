@@ -3,10 +3,11 @@
 SyncSpace is a real-time team workspace: Slack-style channels and direct messages combined with
 Trello-style task boards, in one app.
 
-> **Status:** foundation, data model, authentication + workspace onboarding, channels +
-> real-time chat, and **Kanban boards, tasks and notifications** are done: drag-and-drop boards
-> with assignees, labels, priorities, due dates and URL-shareable filters, plus a realtime
-> notification inbox. Member management and deployment come next (see the roadmap).
+> **Status:** feature-complete MVP, ready for final PostgreSQL testing and deployment.
+> Done: authentication, workspaces and invites, real-time chat (channels, DMs, threads,
+> reactions, presence, typing, unread state, search), Kanban boards with tasks and
+> notifications, and **file attachments** on messages and tasks (S3-compatible storage). Long
+> histories are virtualized. Member management is the remaining roadmap item.
 
 - Architecture decisions: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Data model, invariants and delete rules: [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md)
@@ -14,6 +15,8 @@ Trello-style task boards, in one app.
 - Authorization rules: [`docs/PERMISSIONS.md`](docs/PERMISSIONS.md)
 - Chat, realtime events, read state, presence and typing: [`docs/CHAT.md`](docs/CHAT.md)
 - Boards, tasks, drag and drop, notifications: [`docs/TASKS.md`](docs/TASKS.md)
+- File uploads, storage, access control: [`docs/UPLOADS.md`](docs/UPLOADS.md)
+- Production deployment checklist and environment: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - Feature folder conventions: [`apps/web/src/features/README.md`](apps/web/src/features/README.md)
 
 ## Tech stack
@@ -82,20 +85,22 @@ cp apps/web/.env.example apps/web/.env
 
 **`apps/api/.env`**
 
-| Variable                                                                           | Default                 | Notes                                                                                     |
-| ---------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
-| `PORT`                                                                             | `4000`                  |                                                                                           |
-| `NODE_ENV`                                                                         | `development`           | `development` \| `test` \| `production`                                                   |
-| `DATABASE_URL`                                                                     | —                       | `postgresql://…`. Required to use the app (and in production)                             |
-| `FRONTEND_URL`                                                                     | `http://localhost:5173` | Web app URL for email links and OAuth redirects. Required in production                   |
-| `API_PUBLIC_URL`                                                                   | `http://localhost:4000` | API URL for OAuth callbacks. Required in production                                       |
-| `CORS_ORIGIN`                                                                      | `http://localhost:5173` | Comma-separated list of allowed origins (credentials on)                                  |
-| `JWT_SECRET`                                                                       | dev fallback            | ≥ 32 chars. Required in production                                                        |
-| `COOKIE_SAME_SITE` / `COOKIE_DOMAIN`                                               | `lax` / —               | Session cookie attributes (see docs/AUTH.md)                                              |
-| `GOOGLE_CLIENT_ID` / `_SECRET`                                                     | —                       | Enables Google sign-in                                                                    |
-| `GITHUB_CLIENT_ID` / `_SECRET`                                                     | —                       | Enables GitHub sign-in                                                                    |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | —                       | Outgoing email. Without SMTP, development captures mail at http://localhost:4000/dev/mail |
-| `LOG_LEVEL`                                                                        | `debug` (dev)           | `trace` … `fatal`, `silent`                                                               |
+| Variable                                                                            | Default                 | Notes                                                                                     |
+| ----------------------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| `PORT`                                                                              | `4000`                  |                                                                                           |
+| `NODE_ENV`                                                                          | `development`           | `development` \| `test` \| `production`                                                   |
+| `DATABASE_URL`                                                                      | —                       | `postgresql://…`. Required to use the app (and in production)                             |
+| `FRONTEND_URL`                                                                      | `http://localhost:5173` | Web app URL for email links and OAuth redirects. Required in production                   |
+| `API_PUBLIC_URL`                                                                    | `http://localhost:4000` | API URL for OAuth callbacks. Required in production                                       |
+| `CORS_ORIGIN`                                                                       | `http://localhost:5173` | Comma-separated list of allowed origins (credentials on)                                  |
+| `JWT_SECRET`                                                                        | dev fallback            | ≥ 32 chars. Required in production                                                        |
+| `COOKIE_SAME_SITE` / `COOKIE_DOMAIN`                                                | `lax` / —               | Session cookie attributes (see docs/AUTH.md)                                              |
+| `GOOGLE_CLIENT_ID` / `_SECRET`                                                      | —                       | Enables Google sign-in                                                                    |
+| `GITHUB_CLIENT_ID` / `_SECRET`                                                      | —                       | Enables GitHub sign-in                                                                    |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`  | —                       | Outgoing email. Without SMTP, development captures mail at http://localhost:4000/dev/mail |
+| `LOG_LEVEL`                                                                         | `debug` (dev)           | `trace` … `fatal`, `silent`                                                               |
+| `STORAGE_DRIVER`                                                                    | `local`                 | `local` (dev disk), `s3` (R2/S3/MinIO, required choice in production) or `disabled`       |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | — / `auto`              | Object storage for attachments (see docs/UPLOADS.md)                                      |
 
 Configuration is validated at startup (`apps/api/src/config/env.ts`). In production, missing
 `DATABASE_URL`, `FRONTEND_URL` or `API_PUBLIC_URL`, or a missing/weak `JWT_SECRET`, stops the
@@ -136,22 +141,23 @@ npm run dev
 
 Run from the repository root.
 
-| Script                 | What it does                                               |
-| ---------------------- | ---------------------------------------------------------- |
-| `npm run dev`          | API and web together (concurrently)                        |
-| `npm run dev:web`      | Vite dev server only                                       |
-| `npm run dev:api`      | API only (`node --watch` + tsx loader)                     |
-| `npm run build`        | Typecheck shared, bundle the API (tsup), build the web app |
-| `npm run typecheck`    | `tsc` in every workspace                                   |
-| `npm run lint`         | ESLint (type-aware) across the repo                        |
-| `npm run lint:fix`     | ESLint with autofix                                        |
-| `npm run format`       | Prettier write                                             |
-| `npm run format:check` | Prettier check                                             |
-| `npm test`             | Vitest in every workspace                                  |
-| `npm run db:generate`  | Regenerate the Prisma client                               |
-| `npm run db:migrate`   | `prisma migrate dev`                                       |
-| `npm run db:seed`      | Development seed data (refuses to run in production)       |
-| `npm run db:studio`    | Prisma Studio                                              |
+| Script                                                        | What it does                                               |
+| ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `npm run dev`                                                 | API and web together (concurrently)                        |
+| `npm run dev:web`                                             | Vite dev server only                                       |
+| `npm run dev:api`                                             | API only (`node --watch` + tsx loader)                     |
+| `npm run build`                                               | Typecheck shared, bundle the API (tsup), build the web app |
+| `npm run typecheck`                                           | `tsc` in every workspace                                   |
+| `npm run lint`                                                | ESLint (type-aware) across the repo                        |
+| `npm run lint:fix`                                            | ESLint with autofix                                        |
+| `npm run format`                                              | Prettier write                                             |
+| `npm run format:check`                                        | Prettier check                                             |
+| `npm test`                                                    | Vitest in every workspace                                  |
+| `npm run db:generate`                                         | Regenerate the Prisma client                               |
+| `npm run db:migrate`                                          | `prisma migrate dev`                                       |
+| `npm run db:seed`                                             | Development seed data (refuses to run in production)       |
+| `npm run db:seed:large --workspace @syncspace/api -- <email>` | Load-test data: 1,000 messages + a 400-task board          |
+| `npm run db:studio`                                           | Prisma Studio                                              |
 
 **API tests run against a real PostgreSQL engine with no setup:** the suite starts an embedded
 PGlite database and applies the migrations. To use a regular PostgreSQL server instead, point
@@ -200,16 +206,16 @@ The full reasoning is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Roadmap
 
-| Phase | Scope                                                                                             |
-| ----- | ------------------------------------------------------------------------------------------------- |
-| 0     | ✅ **Foundation** — monorepo, contracts, API/realtime skeleton, app shell, tokens                 |
-| 1     | ✅ **Database schema + permissions** — MVP schema, migration, invariants, policy, seed            |
-| 2     | ✅ **Auth + onboarding** — password & Google/GitHub sign-in, reset, workspaces, invites, switcher |
-| 3     | Members and roles — member list, role changes, removal, ownership transfer, pending invites       |
-| 4     | ✅ **Channels and direct messages** — lists, private membership, archive, DMs/groups, navigation  |
-| 5     | ✅ **Real-time messaging** — optimistic send, edit/delete, pagination, threads, reactions, unread |
-| 6     | ✅ **Presence and typing indicators** (+ workspace message search)                                |
-| 7     | Attachments — file/image upload and previews                                                      |
-| 8     | ✅ **Kanban boards and tasks** — columns, drag and drop, assignees, labels, priorities, due dates |
-| 9     | ✅ **Notifications and search** — realtime inbox, task search (mentions and reminders later)      |
-| 10    | Polish and deployment — responsive pass, accessibility, Vercel + Render + PostgreSQL              |
+| Phase | Scope                                                                                                                                                                 |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | ✅ **Foundation** — monorepo, contracts, API/realtime skeleton, app shell, tokens                                                                                     |
+| 1     | ✅ **Database schema + permissions** — MVP schema, migration, invariants, policy, seed                                                                                |
+| 2     | ✅ **Auth + onboarding** — password & Google/GitHub sign-in, reset, workspaces, invites, switcher                                                                     |
+| 3     | Members and roles — member list, role changes, removal, ownership transfer, pending invites                                                                           |
+| 4     | ✅ **Channels and direct messages** — lists, private membership, archive, DMs/groups, navigation                                                                      |
+| 5     | ✅ **Real-time messaging** — optimistic send, edit/delete, pagination, threads, reactions, unread                                                                     |
+| 6     | ✅ **Presence and typing indicators** (+ workspace message search)                                                                                                    |
+| 7     | ✅ **Attachments** — S3-compatible storage (R2), validated uploads, previews, access-checked downloads                                                                |
+| 8     | ✅ **Kanban boards and tasks** — columns, drag and drop, assignees, labels, priorities, due dates                                                                     |
+| 9     | ✅ **Notifications and search** — realtime inbox, task search (mentions and reminders later)                                                                          |
+| 10    | ✅ **Production polish** — virtualization, loading/empty/error states, accessibility, security pass; deployment is documented (docs/DEPLOYMENT.md), not yet performed |

@@ -1,6 +1,7 @@
 import type { Board, BoardColumn, Task, TaskLabel } from '@syncspace/shared'
 
 import type { Prisma } from '@/generated/prisma/client'
+import { attachmentSelect, toAttachmentDto } from '@/modules/attachments/attachments.service'
 import { publicUserSelect, toPublicUser } from '@/modules/chat/presenters'
 
 /**
@@ -96,10 +97,7 @@ export const taskSelect = {
   createdBy: { select: publicUserSelect },
   assignees: { select: { user: { select: publicUserSelect } }, orderBy: { assignedAt: 'asc' } },
   labels: { select: { label: { select: labelSelect } } },
-  attachments: {
-    select: { id: true, fileName: true, mimeType: true, size: true, url: true },
-    orderBy: { createdAt: 'asc' },
-  },
+  attachments: { select: attachmentSelect, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.TaskSelect
 
 export type TaskRow = Prisma.TaskGetPayload<{ select: typeof taskSelect }>
@@ -130,6 +128,6 @@ export function toTaskDto(task: TaskRow): Task {
     labels: task.labels
       .map((assignment) => toLabelDto(assignment.label))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    attachments: task.attachments,
+    attachments: task.attachments.map(toAttachmentDto),
   }
 }

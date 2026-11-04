@@ -29,6 +29,8 @@ import { type Request, Router } from 'express'
 
 import { requireAuth } from '@/middleware/require-auth'
 import { validate } from '@/middleware/validate'
+import { uploadRateLimit } from '@/modules/attachments/attachments.router'
+import { parseMultipart } from '@/modules/attachments/multipart'
 import { getWorkspaceAccess } from '@/modules/workspaces/workspace-access'
 
 import { loadBoard, loadBoardById, loadTaskById } from './access'
@@ -43,6 +45,7 @@ import {
 import { createColumn, deleteColumn, moveColumn, renameColumn } from './columns.service'
 import { createLabel, deleteLabel, listLabels, updateLabel } from './labels.service'
 import {
+  addTaskAttachments,
   createTask,
   getTask,
   moveTask,
@@ -243,6 +246,11 @@ tasksRouter.put(
     res.json(body)
   },
 )
+
+tasksRouter.post('/:taskId/attachments', uploadRateLimit, parseMultipart, async (req, res) => {
+  const body: Task = await addTaskAttachments(await task(req), req.files ?? [])
+  res.status(201).json(body)
+})
 
 tasksRouter.post('/:taskId/archive', async (req, res) => {
   const body: Task = await setTaskArchived(await task(req), true)

@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { paths } from '@/app/router/paths'
 import { buttonVariants } from '@/components/ui/button'
 import { useSession } from '@/features/auth/hooks'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { useCurrentWorkspaceId, useWorkspace, useWorkspaceActor } from '../hooks'
 
@@ -16,6 +17,7 @@ export function WorkspaceHomePage() {
   const { data: workspace } = useWorkspace(workspaceId)
   const { data: user } = useSession()
   const actor = useWorkspaceActor()
+  useDocumentTitle(workspace ? `${workspace.name} overview` : 'Overview')
   if (!workspace || !user) return null
 
   return (

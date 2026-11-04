@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { requestPasswordReset } from '../api'
 import { AuthCard, FieldError } from '../components/AuthCard'
@@ -19,6 +20,7 @@ import { errorMessage } from '../messages'
 type ForgotFormValues = z.input<typeof forgotPasswordInputSchema>
 
 export function ForgotPasswordPage() {
+  useDocumentTitle('Forgot password')
   const [searchParams] = useSearchParams()
   const form = useForm<ForgotFormValues, unknown, z.output<typeof forgotPasswordInputSchema>>({
     resolver: zodResolver(forgotPasswordInputSchema),

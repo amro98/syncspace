@@ -141,8 +141,8 @@ export function ThreadPanel({
                   : 'You cannot reply here.'
                 : null
             }
-            onSend={(content) => {
-              send.mutate({ content, clientMessageId: crypto.randomUUID() })
+            onSend={(content, files) => {
+              send.mutate({ content, clientMessageId: crypto.randomUUID(), files })
             }}
           />
         </>

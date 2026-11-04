@@ -69,7 +69,7 @@ export function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          'relative flex max-h-[90dvh] w-full animate-in flex-col gap-4 overflow-y-auto rounded-t-xl border bg-popover p-5 text-popover-foreground shadow-lg fade-in-0 outline-none slide-in-from-bottom-4 sm:max-w-md sm:rounded-xl sm:slide-in-from-bottom-0 sm:zoom-in-95',
+          'relative flex max-h-[90dvh] w-full animate-in flex-col gap-4 overflow-y-auto rounded-t-xl border bg-popover p-5 text-popover-foreground shadow-lg fade-in-0 outline-none slide-in-from-bottom-4 sm:max-w-md sm:rounded-xl sm:slide-in-from-bottom-0 sm:zoom-in-95 [&>*]:shrink-0',
           className,
         )}
       >

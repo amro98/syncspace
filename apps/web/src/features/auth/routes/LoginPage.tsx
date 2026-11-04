@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { isApiError } from '@/lib/api-client'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { login } from '../api'
 import { AuthCard, FieldError, OrDivider } from '../components/AuthCard'
@@ -23,6 +24,7 @@ import { errorMessage, oauthRedirectError } from '../messages'
 type LoginFormValues = z.input<typeof loginInputSchema>
 
 export function LoginPage() {
+  useDocumentTitle('Sign in')
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()

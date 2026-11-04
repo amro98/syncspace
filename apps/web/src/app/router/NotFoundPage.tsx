@@ -1,10 +1,12 @@
 import { Link } from 'react-router'
 
 import { buttonVariants } from '@/components/ui/button'
+import { useDocumentTitle } from '@/lib/use-document-title'
 
 import { paths } from './paths'
 
 export function NotFoundPage() {
+  useDocumentTitle('Page not found')
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6 text-center">
       <p className="text-sm font-medium text-primary">404</p>
